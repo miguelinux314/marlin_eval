@@ -30,10 +30,10 @@ gipfeli.a:
 	@gcc-ar rcs $@  $(patsubst %,/tmp/%.o,$(GIPFELIFILES))
 
 marlin.a:
-	#@echo "DOWNLOADING $*"
-	#@rm -rf gipfeli
-	#@git clone -q https://github.com/google/gipfeli
-	#@cd gipfeli && git checkout -q 04fe241e27f6dcfef239afc6c5e3cee0b4d7c333
+	@echo "DOWNLOADING $*"
+	@rm -rf marlin
+	@git clone -q https://github.com/MartinezTorres/marlin
+	#@cd marlin && git checkout -q 04fe241e27f6dcfef239afc6c5e3cee0b4d7c333
 	@echo "CREATING $@"
 	#@rm -rf marlin/build
 	@mkdir -p marlin/build
