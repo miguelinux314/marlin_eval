@@ -312,7 +312,7 @@ int main( int , char *[] ) {
 		
 /*	std::vector<shared_ptr<CODEC8>> C = {
 		std::make_shared<Marlin2018>(Distribution::Laplace,12,0,11),
-		std::make_shared<Marlin2018>(Distribution::Laplace,12,2,11),
+//		std::make_shared<Marlin2018>(Distribution::Laplace,12,2,11),
 		std::make_shared<Marlin2018>(Distribution::Laplace,12,4,11),
 //		std::make_shared<Marlin2018>(Distribution::Laplace,16,0,11),
 //		std::make_shared<Marlin2018>(Distribution::Laplace,12,6,11),
@@ -329,6 +329,7 @@ int main( int , char *[] ) {
 		std::make_shared<Lz4>(),
 		std::make_shared<Zstd>(),
 		std::make_shared<CharLS>(),
+		std::make_shared<Marlin2019>(Distribution::Laplace),
 	};
 
 	// Testing marlin without deduplication
@@ -338,9 +339,12 @@ int main( int , char *[] ) {
 
 */
 
+	std::map<std::string, double> conf;
+	conf["O"] = 4;
+	conf.emplace("minMarlinSymbols",2);
+	conf.emplace("purgeProbabilityThreshold",0.5/4096/64);
 	std::vector<shared_ptr<CODEC8>> C = { 
-		std::make_shared<Marlin2019>(Distribution::Laplace),
-//		std::make_shared<Marlin2018>(Distribution::Laplace,12,4,11),
+		std::make_shared<Marlin2019>(Distribution::Laplace, conf),
 	};
 
 
