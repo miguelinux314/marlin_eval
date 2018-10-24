@@ -7,7 +7,7 @@
 using namespace std;
 int main() {
 	
-	int skip=5;
+	int skip=1;
 	
 	std::vector<std::vector<double>> LaplacianPDF(101);
 	for (size_t i=0; i<LaplacianPDF.size(); i++)
@@ -20,9 +20,12 @@ int main() {
 
 	std::map<std::string, double> conf;
 	conf["O"] = 4;
-	conf["K"] = 12;
+	conf["K"] = 8;	
+	conf.emplace("iterations",2);
+
+//	conf.emplace("autoMaxWordSize",7);
 	conf.emplace("minMarlinSymbols",2);
-	conf.emplace("purgeProbabilityThreshold",0.5/4096/64);
+	conf.emplace("purgeProbabilityThreshold",0.5/4096/1);
 
 	
 	ofstream tex("out.tex");
@@ -70,9 +73,20 @@ int main() {
 			ylabel style={font={\footnotesize},yshift=-2mm},
 			legend style={at={(0.5,-0.2)},legend columns=-1,anchor=north,nodes={scale=0.75, transform shape}}
 			])ML";
+
+	conf["O"] = 0;
+	conf["K"] = 8;	
 			
 
-		res << "\\addplot+[line width=2pt, gray!50, mark=none] coordinates { ";
+		res << "\\addplot+[line width=1pt, gray!50, mark=none] coordinates { ";
+		for (size_t i=1; i<LaplacianPDF.size()-1; i+=skip)
+			res << "(" << double(i*100.)/Dist.size() << "," << (Marlin("",Dist[i],conf)).efficiency*100. << ")";
+		res << "};" << std::endl;
+
+	conf["O"] = 4;
+	conf["K"] = 10;	
+
+		res << "\\addplot+[line width=1pt, gray!50, mark=none] coordinates { ";
 		for (size_t i=1; i<LaplacianPDF.size()-1; i+=skip)
 			res << "(" << double(i*100.)/Dist.size() << "," << (Marlin("",Dist[i],conf)).efficiency*100. << ")";
 		res << "};" << std::endl;
