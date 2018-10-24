@@ -7,7 +7,7 @@
 using namespace std;
 int main() {
 	
-	int skip=1;
+	int skip=2;
 	
 	std::vector<std::vector<double>> LaplacianPDF(101);
 	for (size_t i=0; i<LaplacianPDF.size(); i++)
@@ -25,7 +25,7 @@ int main() {
 
 //	conf.emplace("autoMaxWordSize",7);
 	conf.emplace("minMarlinSymbols",2);
-	conf.emplace("purgeProbabilityThreshold",0.5/4096/1);
+	conf.emplace("purgeProbabilityThreshold",0.5/4096/128);
 
 	
 	ofstream tex("out.tex");
@@ -74,7 +74,8 @@ int main() {
 			legend style={at={(0.5,-0.2)},legend columns=-1,anchor=north,nodes={scale=0.75, transform shape}}
 			])ML";
 
-	conf["O"] = 0;
+	conf["purgeProbabilityThreshold"] = (0.5/4096);
+	conf["O"] = 4;
 	conf["K"] = 8;	
 			
 
@@ -83,8 +84,9 @@ int main() {
 			res << "(" << double(i*100.)/Dist.size() << "," << (Marlin("",Dist[i],conf)).efficiency*100. << ")";
 		res << "};" << std::endl;
 
+	conf["purgeProbabilityThreshold"] = (0.5/4096);
 	conf["O"] = 4;
-	conf["K"] = 10;	
+	conf["K"] = 12;	
 
 		res << "\\addplot+[line width=1pt, gray!50, mark=none] coordinates { ";
 		for (size_t i=1; i<LaplacianPDF.size()-1; i+=skip)
