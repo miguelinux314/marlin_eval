@@ -340,9 +340,9 @@ int main( int , char *[] ) {
 */
 
 	std::map<std::string, double> conf;
-	conf["O"] = 4;
+	conf["O"] = 2;
 	conf.emplace("minMarlinSymbols",2);
-	conf.emplace("autoMaxWordSize",8);
+//	conf.emplace("autoMaxWordSize",8);
 	conf.emplace("purgeProbabilityThreshold",0.5/4096/256);
 	std::vector<shared_ptr<CODEC8>> C = { 
 		std::make_shared<Marlin2019>(Distribution::Laplace, conf),

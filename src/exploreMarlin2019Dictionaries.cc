@@ -75,30 +75,35 @@ static void printEncodingTable(const marlin::TMarlinDictionary<uint8_t,uint8_t> 
 using namespace std;
 int main() {
 	
-	auto exponential = Distribution::pdf(8,Distribution::Exponential,0.75);
+	auto dist = Distribution::pdf(8,Distribution::Exponential,0.75);
+	
+	dist[0] = 1;
+	for (size_t i=1; i<dist.size(); i++)
+		dist[0] -= dist[i];
 
 	std::map<std::string, double> conf;
-	conf["O"] = 1;
+	conf["O"] = 0;
 	conf["K"] = 3;	
 	conf["shift"] = 1;	
 	conf["debug"] = 99;
-	conf.emplace("iterations",5);
+	conf["iterations"] = 5;
 
-//	conf.emplace("autoMaxWordSize",7);
+	//conf.emplace("maxWordSize",7);
 	conf.emplace("minMarlinSymbols",2);
-	conf.emplace("purgeProbabilityThreshold",0.5/4096/128);
+	//conf.emplace("purgeProbabilityThreshold",0.5/4096/128);
 
-	conf.emplace("purgeProbabilityThreshold",0.000003);
+	//conf["purgeProbabilityThreshold"] = 0.001;
+	//conf.emplace("purgeProbabilityThreshold",0.06);
 
 	
-	marlin::TMarlinDictionary<uint8_t,uint8_t> dict(exponential,conf);
+	marlin::TMarlinDictionary<uint8_t,uint8_t> dict(dist,conf);
 	printEncodingTable(dict);
 	
 	
 	
 	
-	for (size_t i=0; i<exponential.size(); i++)
-		std::cout << "L: " << char('a'+i) << " " << exponential[i] << std::endl;
+	for (size_t i=0; i<dist.size(); i++)
+		std::cout << "L: " << char('a'+i) << " " << dist[i] << std::endl;
 	
 	return 0;
 }
