@@ -44,10 +44,33 @@ class Distribution {
 		return norm1(pdf);
 	}
 
+	static inline std::vector<double> PDFPoisson(size_t N, double lambda) {
+
+		std::vector<double> pdf(N, 1e-100);
+		double v = std::exp(-lambda);
+		pdf[0] += v;
+		for (size_t i=1; i<10*N; i++) {
+			v = v * (lambda/i);
+			pdf[      i  % N] += v;
+		}
+
+		return norm1(pdf);
+	}
+	
+	
+
 public:
 
-	enum Type { Gaussian, Laplace, Exponential };
+	enum Type { Gaussian, Laplace, Exponential, Poisson };
 
+	static inline std::vector<double> pdfByType(size_t N, Type type, double var) {
+
+		if (type == Gaussian   ) return PDFGaussian(N,var);
+		if (type == Laplace    ) return PDFLaplace(N,var);
+		if (type == Exponential) return PDFExponential(N,var);
+		if (type == Poisson    ) return PDFPoisson(N,var);
+		throw std::runtime_error("Unsupported distribution");		
+	}
 
 	static inline double entropy(const std::vector<double> &pdf) {
 
@@ -64,31 +87,25 @@ public:
 		return entropy(std::vector<double>(pdf.begin(), pdf.end()));
 	}
 
-	static inline std::vector<double> pdf(size_t N, Type type, double h) {
-
-		auto *dist = &PDFGaussian;
-		if      (type == Gaussian   ) dist = &PDFGaussian;
-		else if (type == Laplace    ) dist = &PDFLaplace;
-		else if (type == Exponential) dist = &PDFExponential;
-		else throw std::runtime_error("Unsupported distribution");
+	static inline std::vector<double> pdfByEntropy(size_t N, Type type, double h) {
 
 		double b=1<<16;
 		// Estimate parameter b from p using dicotomic search
 		double stepSize = 1<<15;
 		while (stepSize>1E-12) {
-			if (h > entropy(dist(N,b))/std::log2(N) ) b+=stepSize;
+			if (h > entropy(pdfByType(N,type,b))/std::log2(N) ) b+=stepSize;
 			else b-=stepSize;
 			stepSize/=2.;
 		}
-
+		
 		//std::cerr << "b: " << b << std::endl;
 
-		return dist(N,b);
+		return pdfByType(N,type,b);
 	}
 
-	static inline std::array<double,256> pdf(Type type, double h) {
+	static inline std::array<double,256> pdfByEntropy(Type type, double h) {
 
-		auto P = pdf(256, type, h);
+		auto P = pdfByEntropy(256, type, h);
 		std::array<double,256> A;
 		for (size_t i=0; i<256; i++) A[i]=P[i];
 		return A;

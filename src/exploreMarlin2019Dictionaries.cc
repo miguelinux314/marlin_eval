@@ -82,7 +82,7 @@ int main() {
 		dist[0] -= dist[i];
 
 	std::map<std::string, double> conf;
-	conf["O"] = 0;
+	conf["O"] = 1;
 	conf["K"] = 3;	
 	conf["shift"] = 1;	
 	conf["debug"] = 99;
@@ -98,8 +98,6 @@ int main() {
 	
 	marlin::TMarlinDictionary<uint8_t,uint8_t> dict(dist,conf);
 	printEncodingTable(dict);
-	
-	
 	
 	
 	for (size_t i=0; i<dist.size(); i++)
