@@ -9,7 +9,7 @@ typedef marlin::TMarlinDictionary<uint8_t,uint8_t> MarlinDict;
 using namespace std;
 int main() {
 	
-	int skip=2;
+	int skip=1;
 
 
 	std::map<std::string, std::vector<std::vector<double>>> distributions;
@@ -109,7 +109,8 @@ int main() {
 	}
 
 
-	if (true) {
+	// All possible shift plotted
+	if (false) {
 	
 		auto conf = baseConf;
 		//tex << "\\input{results/ssse1.tex}\n";
@@ -169,6 +170,109 @@ int main() {
 		}
 	}
 
+
+	// Rice-Marlin vs Rice
+	if (true) {
+	
+		auto conf = baseConf;
+		//tex << "\\input{results/ssse1.tex}\n";
+		//ofstream res("results/ssse1.tex");
+		auto &res = tex;
+
+		for (auto &&distribution : distributions) {
+			auto Dist = distribution.second;
+
+			res << R"ML(
+			\begin{figure}
+			\centering
+			\begin{tikzpicture} 
+			\begin{axis}[
+				title="Same Dictionary Size Efficiency", 
+				title style={yshift=-1mm},
+				height=3cm, width=6cm,
+				scale only axis, 
+				enlargelimits=false, 
+				xmin=0, xmax=100, 
+				ymin=80, ymax=100, 
+				ymajorgrids, major grid style={dotted, gray}, 
+				x tick label style={font={\footnotesize},yshift=1mm}, 
+				y tick label style={font={\footnotesize},xshift=-1mm},
+				ylabel={\emph{Efficiency(\%)}}, 
+				xlabel={\emph{Entropy (\%)}}, 
+				xlabel style={font={\footnotesize},xshift= 2mm}, 
+				ylabel style={font={\footnotesize},yshift=-2mm},
+				legend style={at={(0.5,-0.2)},legend columns=-1,anchor=north,nodes={scale=0.75, transform shape}}
+				])ML";
+
+
+			conf["purgeProbabilityThreshold"] = (0.5/4096);
+			conf["O"] = 4;
+			conf["K"] = 8;	
+				
+
+				res << "\\addplot+[line width=1pt, gray!50, mark=none] coordinates { ";
+				for (size_t i=1; i<Dist.size()-1; i+=skip) {
+					double marlinEfficiency = MarlinDict(Dist[i],conf).efficiency*100.
+					res << "(" << double(i*100.)/Dist.size() << "," << marlinEfficiency << ")";
+				}
+				res << "};" << std::endl;
+
+
+				
+				// RICE Efficiency
+				res << "\\addplot+[line width=1pt, gray!50, mark=none] coordinates { ";
+				for (size_t i=1; i<Dist.size()-1; i+=skip) {
+
+					for (size_t j=0; j<Dist[i].size(); j++) {
+						if (Dist[i][j]>0 and Dist[i][j]<1) continue;
+						std::cout << Dist[i][j] << std::endl;
+					}
+					
+					double riceEfficiency = 0;
+					for (size_t shift=0; shift<6; shift++) {
+						double meansize = 0;
+						
+						
+						for (size_t j=0; j<Dist[i].size(); j++)
+							meansize += Dist[i][j] * (shift + 1 + (j>>shift));
+						
+						if (riceEfficiency < i/meansize)
+							riceEfficiency = i/meansize;
+						
+					}
+
+					for (size_t shift=0; shift<6; shift++) {
+						double meansize = 0;
+						for (size_t j=0; j<Dist[i].size(); j++)
+							meansize += Dist[i][j] * (shift + 2 + (int(std::abs(int8_t(j)))>>shift));
+						
+						if (riceEfficiency < i/meansize)
+							riceEfficiency = i/meansize;
+						
+					}
+					
+					riceEfficiency = 8*riceEfficiency/Dist.size();
+					
+					//std::cout << riceEfficiency << std::endl;
+					
+					
+					
+					res << "(" << double(i*100.)/Dist.size() << "," << riceEfficiency*100.<< ")";
+				}
+				res << "};" << std::endl;
+
+
+			res << "\\legend{No Overlap, Victim only, Specialized only, Victim + Specialized}" << std::endl;
+				
+			res << R"ML(
+				\end{axis} 
+				\end{tikzpicture}
+				\caption{}
+				\label{fig:}
+				\end{figure}
+				)ML";
+		}
+	}
 
 	if (false) {
 		

@@ -47,11 +47,11 @@ class Distribution {
 	static inline std::vector<double> PDFPoisson(size_t N, double lambda) {
 
 		std::vector<double> pdf(N, 1e-100);
-		long double v = std::exp(-lambda);
-		pdf[0] += v;
+		double lv = -lambda;
+		pdf[0] += std::exp(std::max(std::min(20.,lv),-20.));
 		for (size_t i=1; i<10*N; i++) {
-			v = v * (lambda/i);
-			pdf[      i  % N] += v;
+			lv = lv + std::log(lambda) - std::log(i);
+			pdf[      i  % N] += std::exp(std::max(std::min(20.,lv),-20.));
 		}
 
 		return norm1(pdf);
