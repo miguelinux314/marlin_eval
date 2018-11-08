@@ -9,15 +9,16 @@ typedef marlin::TMarlinDictionary<uint8_t,uint8_t> MarlinDict;
 using namespace std;
 int main() {
 	
-	int skip=1;
+	int skip=2;
+	size_t nDistributions = 257;
 
 
 	std::map<std::string, std::vector<std::vector<double>>> distributions;
-	for (size_t i=0; i<101; i++) {
-		distributions["Exponential"].push_back( Distribution::pdfByEntropy(256,Distribution::Exponential,i/100.));
-		distributions["Laplace"].push_back( Distribution::pdfByEntropy(256,Distribution::Laplace,i/100.));
-		distributions["Gaussian"].push_back( Distribution::pdfByEntropy(256,Distribution::Gaussian,i/100.));
-		distributions["Poisson"].push_back( Distribution::pdfByEntropy(256,Distribution::Poisson,i/100.));
+	for (size_t i=0; i<nDistributions; i++) {
+//		distributions["Exponential"].push_back( Distribution::pdfByEntropy(256,Distribution::Exponential,i/(nDistributions-1.)));
+		distributions["Laplace"].push_back( Distribution::pdfByEntropy(256,Distribution::Laplace,i/(nDistributions-1.)));
+//		distributions["Gaussian"].push_back( Distribution::pdfByEntropy(256,Distribution::Gaussian,i/(nDistributions-1.)));
+		distributions["Poisson"].push_back( Distribution::pdfByEntropy(256,Distribution::Poisson,i/(nDistributions-1.)));
 	}
 
 	std::map<std::string, double> baseConf;
@@ -143,7 +144,7 @@ int main() {
 				])ML";
 
 
-		for (size_t shift=0; shift<6; shift++) {
+		for (size_t shift=0; shift<7; shift++) {
 			conf["purgeProbabilityThreshold"] = (0.5/4096);
 			conf["O"] = 4;
 			conf["K"] = 8;	
@@ -171,10 +172,10 @@ int main() {
 	}
 
 
-	// Rice-Marlin vs Rice
-	if (true) {
+	// Rice-Marlin vs Rice DONE!
+	if (false) {
 	
-		auto conf = baseConf;
+		
 		//tex << "\\input{results/ssse1.tex}\n";
 		//ofstream res("results/ssse1.tex");
 		auto &res = tex;
@@ -204,23 +205,8 @@ int main() {
 				legend style={at={(0.5,-0.2)},legend columns=-1,anchor=north,nodes={scale=0.75, transform shape}}
 				])ML";
 
-
-			conf["purgeProbabilityThreshold"] = (0.5/4096);
-			conf["O"] = 4;
-			conf["K"] = 8;	
-				
-
-				res << "\\addplot+[line width=1pt, gray!50, mark=none] coordinates { ";
-				for (size_t i=1; i<Dist.size()-1; i+=skip) {
-					double marlinEfficiency = MarlinDict(Dist[i],conf).efficiency*100.
-					res << "(" << double(i*100.)/Dist.size() << "," << marlinEfficiency << ")";
-				}
-				res << "};" << std::endl;
-
-
-				
 				// RICE Efficiency
-				res << "\\addplot+[line width=1pt, gray!50, mark=none] coordinates { ";
+				res << "\\addplot+[line width=2pt, gray!50, mark=none] coordinates { ";
 				for (size_t i=1; i<Dist.size()-1; i+=skip) {
 
 					for (size_t j=0; j<Dist[i].size(); j++) {
@@ -229,9 +215,8 @@ int main() {
 					}
 					
 					double riceEfficiency = 0;
-					for (size_t shift=0; shift<6; shift++) {
+					for (size_t shift=0; shift<8; shift++) {
 						double meansize = 0;
-						
 						
 						for (size_t j=0; j<Dist[i].size(); j++)
 							meansize += Dist[i][j] * (shift + 1 + (j>>shift));
@@ -241,10 +226,10 @@ int main() {
 						
 					}
 
-					for (size_t shift=0; shift<6; shift++) {
-						double meansize = 0;
-						for (size_t j=0; j<Dist[i].size(); j++)
-							meansize += Dist[i][j] * (shift + 2 + (int(std::abs(int8_t(j)))>>shift));
+					for (size_t shift=0; shift<8; shift++) {
+						double meansize = Dist[i][0] * (shift + 1);
+						for (size_t j=1; j<Dist[i].size(); j++)
+							meansize += Dist[i][j] * (shift + 2 + (int(j>127?256-j:j)>>shift));
 						
 						if (riceEfficiency < i/meansize)
 							riceEfficiency = i/meansize;
@@ -262,6 +247,59 @@ int main() {
 				res << "};" << std::endl;
 
 
+
+				{
+					auto conf = baseConf;
+					conf["autoMaxWordSize"]=512;
+					conf["purgeProbabilityThreshold"] = 0;
+					conf["O"] = 4;
+					conf["K"] = 8;	
+					
+
+					res << "\\addplot+[line width=2pt, blue!50, mark=none] coordinates { ";
+					for (size_t i=1; i<Dist.size()-1; i+=skip) {
+						double marlinEfficiency = MarlinDict(Dist[i],conf).efficiency*100.;
+						res << "(" << double(i*100.)/Dist.size() << "," << marlinEfficiency << ")";
+					}
+					res << "};" << std::endl;
+				}
+
+				{
+					auto conf = baseConf;
+					conf["autoMaxWordSize"]=512;
+					conf["purgeProbabilityThreshold"] = (0.5/4096);
+					conf["O"] = 4;
+					conf["K"] = 8;
+					conf["shift"]=0;
+					
+
+					res << "\\addplot+[line width=2pt, red!50, mark=none] coordinates { ";
+					for (size_t i=1; i<Dist.size()-1; i+=skip) {
+						double marlinEfficiency = MarlinDict(Dist[i],conf).efficiency*100.;
+						res << "(" << double(i*100.)/Dist.size() << "," << marlinEfficiency << ")";
+					}
+					res << "};" << std::endl;
+				}
+
+				{
+					auto conf = baseConf;
+					conf["autoMaxWordSize"]=512;
+					conf["purgeProbabilityThreshold"] = (0.5/4096);
+					conf["O"] = 4;
+					conf["K"] = 8;	
+					
+
+					res << "\\addplot+[line width=1pt, green, mark=none] coordinates { ";
+					for (size_t i=1; i<Dist.size()-1; i+=skip) {
+						double marlinEfficiency = MarlinDict(Dist[i],conf).efficiency*100.;
+						res << "(" << double(i*100.)/Dist.size() << "," << marlinEfficiency << ")";
+					}
+					res << "};" << std::endl;
+				}
+
+
+				
+
 			res << "\\legend{No Overlap, Victim only, Specialized only, Victim + Specialized}" << std::endl;
 				
 			res << R"ML(
@@ -274,6 +312,104 @@ int main() {
 		}
 	}
 
+
+	// Rice-Marlin vs Marlin
+	if (true) {
+	
+		
+		auto &res = tex;
+
+		for (auto &&distribution : distributions) {
+			auto Dist = distribution.second;
+
+			res << R"ML(
+			\begin{figure}
+			\centering
+			\begin{tikzpicture} 
+			\begin{axis}[
+				title="Same Dictionary Size Efficiency", 
+				title style={yshift=-1mm},
+				height=3cm, width=6cm,
+				scale only axis, 
+				enlargelimits=false, 
+				xmin=0, xmax=100, 
+				ymin=80, ymax=100, 
+				ymajorgrids, major grid style={dotted, gray}, 
+				x tick label style={font={\footnotesize},yshift=1mm}, 
+				y tick label style={font={\footnotesize},xshift=-1mm},
+				ylabel={\emph{Efficiency(\%)}}, 
+				xlabel={\emph{Entropy (\%)}}, 
+				xlabel style={font={\footnotesize},xshift= 2mm}, 
+				ylabel style={font={\footnotesize},yshift=-2mm},
+				legend style={at={(0.5,-0.2)},legend columns=-1,anchor=north,nodes={scale=0.75, transform shape}}
+				])ML";
+
+				{
+					auto conf = baseConf;
+					conf["autoMaxWordSize"]=512;
+					conf["purgeProbabilityThreshold"] = (0.5/4096);
+					conf["O"] = 4;
+					conf["K"] = 8;	
+					
+
+					res << "\\addplot+[line width=2pt, blue!50, mark=none] coordinates { ";
+					for (size_t i=1; i<Dist.size()-1; i+=skip) {
+						double marlinEfficiency = MarlinDict(Dist[i],conf).efficiency*100.;
+						res << "(" << double(i*100.)/Dist.size() << "," << marlinEfficiency << ")";
+					}
+					res << "};" << std::endl;
+				}
+
+				{
+					auto conf = baseConf;
+					conf["autoMaxWordSize"]=512;
+					conf["purgeProbabilityThreshold"] = 0;
+					conf["O"] = 4;
+					conf["K"] = 12;
+					conf["shift"]=0;
+					
+
+					res << "\\addplot+[line width=2pt, red!50, mark=none] coordinates { ";
+					for (size_t i=1; i<Dist.size()-1; i+=skip) {
+						double marlinEfficiency = MarlinDict(Dist[i],conf).efficiency*100.;
+						res << "(" << double(i*100.)/Dist.size() << "," << marlinEfficiency << ")";
+					}
+					res << "};" << std::endl;
+				}
+
+				{
+					auto conf = baseConf;
+					conf["autoMaxWordSize"]=512;
+					conf["purgeProbabilityThreshold"] = 0;
+					conf["O"] = 0;
+					conf["K"] = 12;
+					conf["shift"]=0;
+					
+
+					res << "\\addplot+[line width=2pt, red!50, mark=none] coordinates { ";
+					for (size_t i=1; i<Dist.size()-1; i+=skip) {
+						double marlinEfficiency = MarlinDict(Dist[i],conf).efficiency*100.;
+						res << "(" << double(i*100.)/Dist.size() << "," << marlinEfficiency << ")";
+					}
+					res << "};" << std::endl;
+				}
+
+				
+
+			res << "\\legend{No Overlap, Victim only, Specialized only, Victim + Specialized}" << std::endl;
+				
+			res << R"ML(
+				\end{axis} 
+				\end{tikzpicture}
+				\caption{}
+				\label{fig:}
+				\end{figure}
+				)ML";
+		}
+	}
+
+
+	// Dictionary efficiency vs size and shift
 	if (false) {
 		
 		auto conf = baseConf;
@@ -314,7 +450,7 @@ int main() {
 			
 //		auto Dist = LaplacianPDF;
 		auto Dist = distributions["Laplace"];
-		for (size_t shift=0; shift<=4; shift++) {
+		for (size_t shift=0; shift<=5; shift++) {
 			tex << R"ML( \addplot+[mark=none] coordinates { )ML" << std::endl;
 			std::vector<std::pair<double, double>> values;
 			for (size_t O=0; O<=0; O++) {
@@ -355,6 +491,23 @@ int main() {
 			\end{figure}
 			)ML";
 	}
+
+
+	// Dictionary efficiency vs size and shift (horizontal limits)
+	if (false) {
+		
+		auto Dists = distributions["Laplace"];
+		auto dist = Dists[(Dists.size()-1)/2];
+		for (size_t shift=0; shift<=5; shift++) {
+			std::map<int,double> pdf;
+			for (size_t i=0; i<dist.size(); i++)
+				pdf[i>>shift] += dist[i];
+			
+			std::cout << shift << " " << Distribution::entropy(dist) / (shift+Distribution::entropy(pdf)) << std::endl;
+		}
+	}
+
+	
 
 	tex << "\\end{document}" << endl;
 	

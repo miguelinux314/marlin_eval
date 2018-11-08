@@ -1,4 +1,5 @@
 #pragma once
+#include <map>
 #include <vector>
 #include <array>
 #include <string>
@@ -72,12 +73,24 @@ public:
 		throw std::runtime_error("Unsupported distribution");		
 	}
 
+	
 	static inline double entropy(const std::vector<double> &pdf) {
 
 		double distEntropy=0;
-		for (size_t i=0;i<pdf.size();i++)
-			if (pdf[i]>0.)
-				distEntropy += -pdf[i]*std::log2(pdf[i]); //Should'n I use log2?
+		for (auto &&p : pdf)
+			if (p)
+				distEntropy += -p*std::log2(p);
+
+		return distEntropy;
+	}
+
+	template<typename T> 
+	static inline double entropy(const std::map<T,double> &pdf) {
+
+		double distEntropy=0;
+		for (auto &&p : pdf)
+			if (p.second)
+				distEntropy += -p.second*std::log2(p.second);
 
 		return distEntropy;
 	}
