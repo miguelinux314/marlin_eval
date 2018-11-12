@@ -48,11 +48,31 @@ static void printEncodingTable(const marlin::TMarlinDictionary<uint8_t,uint8_t> 
 					
 	std::cout << "\\begin{tabular}{ r *{8}{|c}||c*{7}{|c}}" << std::endl;
 	std::cout << "    "; for (auto &&w : dictionary.words) { std::cout << " & "; for (auto &&c:w) std::cout << char('a'+c);} std::cout << " \\\\ \\hline" << std::endl;
+	double sum = 0;
 	for (size_t i=0; i<table.size(); i++) {
 		std::cout << "  " << char('a'+i) << " ";
-		for (auto &&w: table[i]) { 
-			double probability = 1000*dictionary.words[w&0xFFFF].p * dictionary.marlinAlphabet[i].p;
-			std::cout << " & \\cellcolor{black!"<< int(probability) <<"}{"; if (probability>60) std::cout << "\\color{white}"; for (auto &&c:dictionary.words[w&0xFFFF]) std::cout << char('a'+c); if (w & FLAG_NEXT_WORD) std::cout << "!"; std::cout << "}"; }
+		for (size_t j=0; j<table[i].size(); j++) {
+			auto &&w = table[i][j]; 
+			double probability = 1000*dictionary.words[j].p * dictionary.marlinAlphabet[i].p;
+			std::cout << " & \\cellcolor{black!"<< int(probability) <<"}{"; 
+			if ( !!(w & FLAG_NEXT_WORD)) {
+				if (!(j%2)) {
+					std::cout << "\\color{red}"; 
+				} else {
+					std::cout << "\\color{blue}"; 
+				}				
+			} else {
+				if (!!(j<8)) {
+					std::cout << "\\color{red}"; 
+				} else {
+					std::cout << "\\color{blue}"; 
+				}
+			}
+			
+			for (auto &&c:dictionary.words[w&0xFFFF]) std::cout << char('a'+c); 
+			if (w & FLAG_NEXT_WORD) std::cout << "!"; std::cout << "}"; 
+			sum += probability;
+		}
 			
 		std::cout << " \\\\ \\hline" << std::endl;
 	}
@@ -67,6 +87,25 @@ static void printEncodingTable(const marlin::TMarlinDictionary<uint8_t,uint8_t> 
 		std::cout << " \\\\ \\hline" << std::endl;
 	}
 	std::cout << "\\end{tabular}" << std::endl;			
+
+
+	std::cout << "sum: " << sum << std::endl;
+
+	{
+		for (size_t i=0; i<table.size(); i++) {
+			for (auto &&w: table[i]) {
+				double probability = 500*dictionary.words[w&0x0FFF].p; 
+				//std::cout << probability << std::endl;
+			}
+		}
+		double sumi = 0;
+		for (size_t i=0; i<dictionary.words.size(); i++) {
+			sumi += dictionary.words[i].p;
+			std::cout << dictionary.words[i].p << std::endl;
+		}
+		std::cout << sumi<< std::endl;
+	}
+
 										
 //	return ret;
 }
@@ -75,7 +114,7 @@ static void printEncodingTable(const marlin::TMarlinDictionary<uint8_t,uint8_t> 
 using namespace std;
 int main() {
 	
-	auto dist = Distribution::pdf(8,Distribution::Exponential,0.75);
+	auto dist = Distribution::pdfByEntropy(8,Distribution::Exponential,0.75);
 	
 	dist[0] = 1;
 	for (size_t i=1; i<dist.size(); i++)
