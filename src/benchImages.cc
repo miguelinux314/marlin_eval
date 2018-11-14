@@ -30,6 +30,9 @@
 #include <codecs/marlin2018.hpp>
 #include <codecs/marlin2019.hpp>
 
+#include <uSnippets/cache.hpp>
+#include <uSnippets/log.hpp>
+
 struct TestTimer {
 	timespec c_start, c_end;
 	void start() { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &c_start); };
@@ -37,7 +40,7 @@ struct TestTimer {
 	double operator()() { return (c_end.tv_sec-c_start.tv_sec) + 1.E-9*(c_end.tv_nsec-c_start.tv_nsec); }
 };
 
-static inline std::vector<std::string> getAllFilenames(std::string path, std::string type="") {
+static inline std::vector<std::string> getAllFilenames(std::string path, std::vector<std::string> types= {""}) {
 	
 	std::vector<std::string> r;
 	DIR *dir;
@@ -46,354 +49,307 @@ static inline std::vector<std::string> getAllFilenames(std::string path, std::st
 		return r;
 	
 	while ((ent = readdir (dir)) != NULL)
-		if (std::string(ent->d_name).size()>=type.size() and std::string(&ent->d_name[std::string(ent->d_name).size()-type.size()])==type)
-			r.push_back(path+"/"+ent->d_name);
+		for (auto && type : types)
+			if (std::string(ent->d_name).size()>=type.size() and std::string(&ent->d_name[std::string(ent->d_name).size()-type.size()])==type)
+				r.push_back(path+"/"+ent->d_name);
 
 	closedir (dir);
 	std::sort(r.begin(), r.end());
 	return r;
 }
 
-static inline cv::Mat1b readPGM8(std::string fileName) {
+namespace predictors {
 	
-	std::ifstream in(fileName);
-	
-	std::string type; int rows, cols, values;
-	in >> type >> cols >> rows >> values;
-	in.get();
-	cv::Mat1b img(rows, cols);
-	in.read((char *)&img(0,0),rows*cols);
-	return img;
-}
+	double predictCompressedBlockSize(const std::vector<uint32_t> &histogram) {
+		
+		double sum = 1e-100;
+		for (auto &&p : histogram)
+			sum += p;
+		
+		
+		double entropy=0;
+		for (auto &&p : histogram)
+			if (p)
+				entropy += -double(p/sum)*std::log2(double(p/sum));
 
-static inline void testCorrectness(std::shared_ptr<CODEC8> codec) {
+		return entropy * sum + 32;
+	}
 	
-	std::cout << "Testing codec: " << codec->name() << " for correctness" << std::endl;
 	
-	for (double p=0.1; p<.995; p+=0.1) {
-		
-		UncompressedData8 in(Distribution::getResiduals(Distribution::pdf(Distribution::Laplace, p),1<<20));
-		CompressedData8 compressed;
-		UncompressedData8 uncompressed; 
-		
-		compressed.randomize();
-		uncompressed.randomize();
-		
-		codec->compress(in, compressed);
-		codec->uncompress(compressed, uncompressed);
-		
-		std::vector<uint8_t> inv(in), outv(uncompressed);
-		
-		if (inv != outv) {
+	enum PredictorType { PREDICTOR_TOP, PREDICTOR_LEFT, PREDICTOR_ABC, PREDICTOR_DC, PREDICTOR_TOP_DC } ;
+
+
+	template<typename T>
+	static std::vector<std::vector<uint32_t>> testPredictorHistograms(cv::Mat_<T> orig_img, size_t imageBlockWidth, PredictorType predictorType, int colorPrediction) {
+
+		if (imageBlockWidth == 0) {
+
+
+			size_t brows = (orig_img.rows+32-1)/32;
+			size_t bcols = (orig_img.cols+32-1)/32;	
+			cv::Mat_<T> img;
+			cv::copyMakeBorder(orig_img, img, 0, brows*32-orig_img.rows, 0, bcols*32-orig_img.cols, cv::BORDER_REPLICATE);
 			
-			std::cout << "P: " << p << " " << "FAIL!     sizes(" << inv.size() << "," << outv.size() << ")" << std::endl;
-			for (size_t i=0; i<10; i++)
-				printf("%02X:%02X ", inv[i], outv[i]);
-			std::cout << std::endl;
+			auto h32 = testPredictorHistograms(img, 32, predictorType, colorPrediction);
+			auto h16 = testPredictorHistograms(img, 16, predictorType, colorPrediction);
+			auto h8  = testPredictorHistograms(img, 8, predictorType, colorPrediction);
+							
 			
-			{
-				int c = 0;
-				for (size_t i=0; i<inv.size(); i++) {
-					if (inv[i] != outv[i]) {
-						printf("Pos %04X = %02X:%02X\n", uint(i), inv[i], outv[i]);
-						if (c++==4) break;
+			//std::cerr << brows << " " << bcols << " " << orig_img.channels() << std::endl;
+			
+			std::vector<std::vector<uint32_t>> ret;
+			size_t channels = orig_img.channels();
+			for (size_t c=0; c<channels; c++) {
+				
+				for (size_t i=0; i<brows; i++) {
+					for (size_t j=0; j<bcols; j++) {
+
+						std::vector<std::vector<uint32_t>> hist16sum;
+						double size16sum = 0;
+						for (size_t ii=0; ii<2; ii++) {
+							for (size_t jj=0; jj<2; jj++) {
+								
+
+								std::vector<std::vector<uint32_t>> hist8sum;
+								double size8sum = 0;
+								for (size_t iii=0; iii<2; iii++) {
+									for (size_t jjj=0; jjj<2; jjj++) {
+										
+										uSnippets::Assert(((4*i+2*ii+iii)*4*bcols+4*j+2*jj+jjj)*channels+c < h8.size()) << "H8! " << ((4*i+2*ii+iii)*4*bcols+4*j+2*jj+jjj)*channels+c << " " << h8.size();
+										auto h = h8[((4*i+2*ii+iii)*4*bcols+4*j+2*jj+jjj)*channels+c];
+										double size8 = predictCompressedBlockSize(h);
+										size8sum += size8;
+										hist8sum.push_back(h);
+									}
+								}
+								
+								uSnippets::Assert(((2*i+1*ii)*2*bcols+2*j+1*jj)*channels+c < h16.size()) << "H16!";
+								auto h = h16[((2*i+1*ii)*2*bcols+2*j+1*jj)*channels+c];
+								double size16 = predictCompressedBlockSize(h);
+								if (size16 < size8sum) {
+									size16sum += size16;
+									hist16sum.push_back(h);
+								} else {
+									size16sum += size8sum;
+									for (auto &&hh:hist8sum)
+										hist16sum.push_back(hh);
+								}
+							}
+						}
+
+						uSnippets::Assert((i*bcols+j)*channels+c < h32.size()) << "H32!";
+						auto h = h32[(i*bcols+j)*channels+c];
+						double size32 = predictCompressedBlockSize(h);
+						if (size32 < size16sum) {
+							ret.push_back(h);
+						} else {
+							for (auto &&hh:hist16sum)
+								ret.push_back(hh);
+						}
 					}
+				}
+			}
+			return ret;
+		}
+
+
+		if (predictorType == PREDICTOR_TOP_DC) {
+			
+			auto p1 = testPredictorHistograms(orig_img, imageBlockWidth, PREDICTOR_TOP, colorPrediction);
+			auto p2 = testPredictorHistograms(orig_img, imageBlockWidth, PREDICTOR_DC, colorPrediction);
+			for (uint i=0; i<p1.size(); i++)
+				if (predictCompressedBlockSize(p2[i]) < predictCompressedBlockSize(p1[i]))
+					p1[i] = p2[i];
+					
+			return p1;
+		}
+
+		const size_t bs = imageBlockWidth;
+
+		size_t brows = (orig_img.rows+bs-1)/bs;
+		size_t bcols = (orig_img.cols+bs-1)/bs;	
+		cv::Mat_<T> img, imgdc;
+		cv::copyMakeBorder(orig_img, img, 0, brows*bs-orig_img.rows, 0, bcols*bs-orig_img.cols, cv::BORDER_REPLICATE);
+		cv::resize(img, imgdc, cv::Size(brows,bcols));
+
+		cv::Mat_<T> imgpredicted = img.clone();
+
+		switch (predictorType) {
+			case PREDICTOR_TOP:
+				for (size_t i=0; i<img.rows-bs+1; i+=bs) {
+					for (size_t j=0; j<img.cols-bs+1; j+=bs) {
+						imgpredicted(i,j) = imgpredicted(i,j) - imgpredicted(i,j);
+						for (size_t jj=1; jj<bs; jj++)
+							imgpredicted(i,j+jj) = img(i,j+jj) - img(i,j+jj-1);
+
+						for (size_t ii=1; ii<bs; ii++)
+							for (size_t jj=0; jj<bs; jj++)
+								imgpredicted(i+ii,j+jj) = img(i+ii,j+jj) - img(i+ii-1,j+jj);
+					}
+				}
+				break;
+			case PREDICTOR_LEFT:
+
+				for (size_t i=0; i<img.rows-bs+1; i+=bs) {
+					for (size_t j=0; j<img.cols-bs+1; j+=bs) {
+						imgpredicted(i,j) = imgpredicted(i,j) - imgpredicted(i,j);
+						for (size_t ii=1; ii<bs; ii++)
+							imgpredicted(i+ii,j) = img(i+ii,j) - img(i+ii-1,j);
+
+						for (size_t ii=0; ii<bs; ii++)
+							for (size_t jj=1; jj<bs; jj++)
+								imgpredicted(i+ii,j+jj) = img(i+ii,j+jj) - img(i+ii,j+jj-1);
+					}
+				}
+				break;
+			case PREDICTOR_ABC:
+				for (size_t i=0; i<img.rows-bs+1; i+=bs) {
+					for (size_t j=0; j<img.cols-bs+1; j+=bs) {
+						imgpredicted(i,j) = imgpredicted(i,j) - imgpredicted(i,j);
+						for (size_t jj=1; jj<bs; jj++)
+							imgpredicted(i,j+jj) = img(i,j+jj) - img(i,j+jj-1);
+
+						for (size_t ii=1; ii<bs; ii++)
+							imgpredicted(i+ii,j) = img(i+ii,j) - img(i+ii-1,j);
+
+						for (size_t ii=1; ii<bs; ii++)
+							for (size_t jj=1; jj<bs; jj++)
+								imgpredicted(i+ii,j+jj) = img(i+ii,j+jj) - img(i+ii-1,j+jj) - img(i+ii,j+jj-1) + img(i+ii-1,j+jj-1);
+					}
+				}
+				break;
+			case PREDICTOR_DC:
+				for (size_t i=0; i<img.rows-bs+1; i+=bs) {
+					for (size_t j=0; j<img.cols-bs+1; j+=bs) {
+						for (size_t ii=0; ii<bs; ii++)
+							for (size_t jj=0; jj<bs; jj++)
+								imgpredicted(i+ii,j+jj) = img(i+ii,j+jj) - imgdc(i/bs,j/bs);
+					}
+				}
+				break;				
+			case PREDICTOR_TOP_DC:
+			default:
+				uSnippets::Assert(false) << "Unsupported predictor";
+		}
+
+		std::vector<std::vector<uint32_t>> ret;
+		
+		if (orig_img.channels()==3 ) {
+			
+			cv::Mat3b pred3b = imgpredicted;
+			
+			if (colorPrediction) {
+				for (auto &&p :pred3b) {
+					uint8_t old = p[colorPrediction-1];
+					p[0] -= old;
+					p[1] -= old;
+					p[2] -= old;
+					p[colorPrediction-1] = old;
+				}
+			}
+			for (size_t i=0; i<pred3b.rows-bs+1; i+=bs) {
+				for (size_t j=0; j<pred3b.cols-bs+1; j+=bs) {
+					std::vector<uint32_t> br(256,0), bg(256,0), bb(256,0);
+					for (size_t ii=0; ii<bs; ii++) {
+						for (size_t jj=0; jj<bs; jj++) {
+							br[pred3b(i+ii,j+jj)[0]]++;
+							bg[pred3b(i+ii,j+jj)[1]]++;
+							bb[pred3b(i+ii,j+jj)[2]]++;
+						}
+					}
+					ret.push_back(br);
+					ret.push_back(bg);
+					ret.push_back(bb);
+				}
+			}
+		} else if (orig_img.channels()==1 ) {
+			
+			cv::Mat1b pred1b = imgpredicted;
+			
+			for (size_t i=0; i<pred1b.rows-bs+1; i+=bs) {
+				for (size_t j=0; j<pred1b.cols-bs+1; j+=bs) {
+					std::vector<uint32_t> h(256,0);
+					for (size_t ii=0; ii<bs; ii++) {
+						for (size_t jj=0; jj<bs; jj++) {
+							h[pred1b(i+ii,j+jj)]++;
+						}
+					}
+					ret.push_back(h);
+				}
+			}
+		}
+		
+		return ret;
+	}
+
+	static std::vector<std::vector<uint32_t>> testPredictorHistograms(cv::Mat orig_img, size_t imageBlockWidth, PredictorType predictorType, int colorPrediction) {
+		if (orig_img.channels()==3) return testPredictorHistograms<cv::Vec3b>(orig_img, imageBlockWidth, predictorType, colorPrediction);
+		if (orig_img.channels()==1) return testPredictorHistograms<uint8_t>(orig_img, imageBlockWidth, predictorType, colorPrediction);
+		uSnippets::Assert(false) << "Type not supported";		
+	}
+}
+	
+int main(int argc, char **argv) {
+	
+	static const int sampleSize = 256;
+	
+	uSnippets::Assert(argc>1) << "must specify test";
+	
+	std::vector<std::string> filenames;
+	for (int i=2; i<argc; i++)
+		for (auto &&f : getAllFilenames(argv[i], {"png", "jpg", "JPEG"}) )
+			filenames.push_back(f);
+
+	uSnippets::Assert(!filenames.empty()) << "must specify dataset paths";
+			
+	//for (auto &&f : filenames) 
+	//	std::cout << f << std::endl;
+	
+	if (std::string(argv[1])=="analyzePredictors") {
+		
+		std::random_shuffle(filenames.begin(), filenames.end());
+		if (filenames.size()>sampleSize) filenames.resize(sampleSize);
+		
+		uSnippets::Log(0) << "Reading Images";
+		std::vector<cv::Mat> images;
+		for (auto &f : filenames)
+			images.push_back(cv::imread(f,cv::IMREAD_UNCHANGED));
+
+		uSnippets::Log(0) << "Images Read";
+
+		for (auto &&imageBlockWidth : std::vector<size_t>{0, 8,16,32}) {
+
+
+//			for (auto &&predictorType : std::vector<predictors::PredictorType>{predictors::PREDICTOR_TOP, predictors::PREDICTOR_LEFT, predictors::PREDICTOR_ABC, predictors::PREDICTOR_DC, predictors::PREDICTOR_TOP_DC }) {
+			for (auto &&predictorType : std::vector<predictors::PredictorType>{predictors::PREDICTOR_TOP, predictors::PREDICTOR_TOP_DC }) {
+
+//				for (auto &&colorPrediction : std::vector<int>{0,1,2,3}) {
+				for (auto &&colorPrediction : std::vector<int>{2}) {
+					
+					std::vector<std::vector<uint32_t>> histograms;
+					std::vector<double> predictedBitsPerPixel;
+					for (auto &i : images) {
+						
+						double predictedSize = 0.;
+						for (auto &h : testPredictorHistograms(i.clone(), imageBlockWidth, predictorType, colorPrediction)) {
+							histograms.push_back(h);
+							predictedSize += predictors::predictCompressedBlockSize(h);
+						}
+						predictedBitsPerPixel.push_back(predictedSize/(i.rows*i.cols));
+					}
+					
+					cv::Scalar mean, stddev;
+					cv::meanStdDev(predictedBitsPerPixel, mean, stddev);
+					std::cout << "BS: " << imageBlockWidth << " ";
+					std::cout << "Pred: " << int(predictorType) << " ";
+					std::cout << "Color: " << int(colorPrediction) << " ";					
+					
+					std::cout << "mean, stdev: " << mean[0] <<  " (+- " << stddev[0] << ") bits per pixel" << std::endl;
+
 				}
 			}
 		}
 	}
-}
-
-static inline void testAgainstP( std::shared_ptr<CODEC8> codec, std::ofstream &tex, size_t testSize = 1<<18) {
-	
-	std::cout << "Testing codec: " << codec->name() << " against P" << std::endl;
-
-	std::map<double, double> C, D, E;
-		
-	// Test compression (C) and uncompression (D) speeds
-	for (double p=0.1; p<.995; p+=0.1) {
-
-		UncompressedData8 in(Distribution::getResiduals(Distribution::pdf(Distribution::Laplace, p),testSize));
-		CompressedData8 compressed;
-		UncompressedData8 uncompressed;
-		
-		compressed.randomize();
-		uncompressed.randomize();
-		
-		TestTimer compressTimer, uncompressTimer;
-		size_t nComp = 5, nUncomp = 5;
-		do {
-			nComp *= 2;
-			codec->compress(in, compressed);
-			compressTimer.start();
-			for (size_t t=0; t<nComp; t++)
-				codec->compress(in, compressed);
-			compressTimer.stop();
-		} while (compressTimer()<.1);
-
-
-		do {
-			nUncomp *= 2;
-			codec->uncompress(compressed, uncompressed);
-			uncompressTimer.start();
-			for (size_t t=0; t<nUncomp; t++)
-				codec->uncompress(compressed, uncompressed);
-			uncompressTimer.stop();
-		} while (uncompressTimer()<.1);
-
-		//std::cerr << "E: " << (nComp*in.nBytes()/  compressTimer())/(1<<20) << std::endl;
-		//std::cerr << "D: " << nUncomp*in.nBytes()/uncompressTimer()/(1<<20) << std::endl;
-				
-		C[p] =   nComp*in.nBytes()/  compressTimer();
-		D[p] = nUncomp*in.nBytes()/uncompressTimer();
-	}
-	
-	{ double m=0; for (auto &v : C) m+=v.second; std::cout << "Mean Compression Speed:   " << m/C.size()/(1<<20) << "MB/s" << std::endl; }
-	{ double m=0; for (auto &v : D) m+=v.second; std::cout << "Mean Decompression Speed: " << m/D.size()/(1<<20) << "MB/s" << std::endl; }
-	
-	// Test compression efficiency (E)
-	for (double p=0.01; p<1.; p+=0.01) {
-		
-		UncompressedData8 in(Distribution::getResiduals(Distribution::pdf(Distribution::Laplace, p),1<<20));
-		CompressedData8 compressed;
-		codec->compress(in, compressed);
-		
-		E[p]=Distribution::entropy(Distribution::pdf(Distribution::Laplace, p))/(8.*double(compressed.nBytes())/(double(in.nBytes())+1e-100));
-	}
-
-	{ double m=0; for (auto &v : E) m+=v.second; std::cout << "Mean Efficiency: " << 100.*m/E.size() << "%" << std::endl; }
-
-	// output tex graph
-	if (tex) {
-		tex << "\\compfig{" << codec->name() << "}{ " << std::endl;
-		tex << "\\addplot coordinates {";
-		for (auto &c : C) tex << "("<<c.first*100<<","<<c.second/(1<<30)<<") ";
-		tex << "};" << std::endl;
-		tex << "\\addplot coordinates {";
-		for (auto &c : D) tex << "("<<c.first*100<<","<<c.second/(1<<30)<<") ";
-		tex << "};" << std::endl;
-		tex << "}{" << std::endl;
-		tex << "\\addplot+[line width=2pt,teal, mark=none] coordinates {";
-		for (auto &c : E) tex << "("<<c.first*100<<","<<c.second*100<<") ";
-		tex << "};" << std::endl;
-		tex << "}%" << std::endl;
-	}
-}
-
-static inline std::pair<std::string,std::string> testOnAllImages( std::shared_ptr<CODEC8> codec, std::ofstream &) {
-
-	//std::cout << "Testing codec: " << codec->name() << " against Images" << std::endl;
-
-	std::map<std::string, double> compressSpeed, uncompressSpeed, compressionRate;
-	
-	size_t sizeData=0, sizeCompressed=0;
-	std::vector<double> encodeSpeeds, decodeSpeeds;
-	
-	for (size_t tries = 0; tries<10; tries++) {
-		sizeData=0;
-		sizeCompressed=0;
-		double encodeTime=0, decodeTime=0;
-		for (auto file : getAllFilenames("rawzor", ".pgm")) {
-			cv::Mat1b img = readPGM8(file);
-			img = img(cv::Rect(0,0,img.cols&0xFF80,img.rows&0xFF80));
-			
-			UncompressedData8 in(img);
-			CompressedData8 compressed;
-			UncompressedData8 uncompressed;
-			
-			TestTimer encodeTimer, decodeTimer;
-			codec->compress(in, compressed);
-			encodeTimer.start();
-				codec->compress(in, compressed);
-			encodeTimer.stop();
-
-			codec->uncompress(compressed, uncompressed);
-			decodeTimer.start();
-				codec->uncompress(compressed, uncompressed);
-			decodeTimer.stop();
-			
-			if ( cv::countNonZero(img != uncompressed.img(img.rows, img.cols)) != 0)
-				std::cerr << "Image uncompressed incorrectly" <<  std::endl;
-
-			sizeData += in.nBytes();
-			sizeCompressed += compressed.nBytes();
-			encodeTime+=encodeTimer();
-			decodeTime+=decodeTimer();
-		}
-		encodeSpeeds.push_back(sizeData/encodeTime);
-		decodeSpeeds.push_back(sizeData/decodeTime);
-	}
-		
-	double meanEncodeSpeed = std::accumulate(encodeSpeeds.begin(), encodeSpeeds.end(), 0.0) / encodeSpeeds.size();
-	double meanDecodeSpeed = std::accumulate(decodeSpeeds.begin(), decodeSpeeds.end(), 0.0) / decodeSpeeds.size();
-	for (auto &&s : encodeSpeeds) s-=meanEncodeSpeed;
-	for (auto &&s : decodeSpeeds) s-=meanDecodeSpeed;
-
-	double stddevEncodeSpeed = std::sqrt(std::inner_product(encodeSpeeds.begin(), encodeSpeeds.end(), encodeSpeeds.begin(), 0.0) / (encodeSpeeds.size()-1));
-
-	double stddevDecodeSpeed = std::sqrt(std::inner_product(decodeSpeeds.begin(), decodeSpeeds.end(), decodeSpeeds.begin(), 0.0) / (decodeSpeeds.size()-1));
-	
-	
-	std::ostringstream enc, dec;
-	enc << "(" << double(sizeData)/sizeCompressed << "," << (meanEncodeSpeed/(1<<20)) << ") +- (0," << stddevEncodeSpeed/(1<<20) << ") [" << codec->name() << "]" << std::endl;
-
-	dec << "(" << double(sizeData)/sizeCompressed << "," << (meanDecodeSpeed/(1<<20)) << ") +- (0," << stddevDecodeSpeed/(1<<20) << ") [" << codec->name() << "]" << std::endl;
-	
-	return std::pair<std::string,std::string>(enc.str(), dec.str());	
-}
-
-
-
-static inline std::pair<std::string,std::string> testOnIndividualImages( std::shared_ptr<CODEC8> codec) {
-
-	std::cout << "Testing codec: " << codec->name() << " against Images" << std::endl;
-
-	std::map<std::string, double> compressSpeed, uncompressSpeed, compressionRate;
-	
-	for (auto file : getAllFilenames("rawzor", ".pgm")) {
-				
-		cv::Mat1b img = readPGM8(file);
-		img = img(cv::Rect(0,0,img.cols&0xFF80,img.rows&0xFF80));
-		
-		UncompressedData8 in(img);
-		CompressedData8 compressed;
-		UncompressedData8 uncompressed;
-		
-		TestTimer compressTimer, uncompressTimer;
-		size_t nComp = 1, nUncomp = 1;
-		do {
-			nComp *= 2;
-			codec->compress(in, compressed);
-			compressTimer.start();
-			for (size_t t=0; t<nComp; t++)
-				codec->compress(in, compressed);
-			compressTimer.stop();
-		} while (compressTimer()<.01);
-
-		do {
-			nUncomp *= 2;
-			codec->uncompress(compressed, uncompressed);
-			uncompressTimer.start();
-			for (size_t t=0; t<nUncomp; t++)
-				codec->uncompress(compressed, uncompressed);
-			uncompressTimer.stop();
-		} while (uncompressTimer()<.01);
-		
-		if ( cv::countNonZero(img != uncompressed.img(img.rows, img.cols)) != 0)
-			std::cerr << "Image uncompressed incorrectly" <<  std::endl;
-
-		compressSpeed[file] = nComp*in.nBytes()/  compressTimer();
-		uncompressSpeed[file] = nUncomp*in.nBytes()/  uncompressTimer();
-		compressionRate[file] = double(compressed.nBytes())/double(in.nBytes());
-		
-//		printf("File: %s (%02.2lf)\n",file.c_str(), double(compressed.nBytes())/double(in.nBytes()));
-	}
-	
-	double meanCompressionRate=0, meanCompressSpeed=0, meanUncompressSpeed=0;
-	for (auto &e : compressionRate) meanCompressionRate += e.second/compressionRate.size(); 
-	for (auto &e : compressSpeed) meanCompressSpeed += e.second/compressSpeed.size(); 
-	for (auto &e : uncompressSpeed) meanUncompressSpeed += e.second/uncompressSpeed.size(); 
-	
-//	std::cout << "Codec: " << codec->name() << std::endl;
-//	std::cout << "R: " << meanCompressionRate << std::endl;
-//	std::cout << "C: " << int(meanCompressSpeed/(1<<20)) << "MB/s" << std::endl;
-//	std::cout << "U: " << int(meanUncompressSpeed/(1<<20)) << "MB/s" << std::endl;
-
-	std::ostringstream enc, dec;
-	enc << "" << 1./meanCompressionRate << " " << (meanCompressSpeed/(1<<20)) << " " << codec->name() << " {west}" << std::endl;
-
-	dec << "" << 1./meanCompressionRate << " " << (meanUncompressSpeed/(1<<20)) << " " << codec->name() << " {west}" << std::endl;
-	
-	return std::pair<std::string,std::string>(enc.str(), dec.str());	
-}
-using namespace std;
-	
-int main( int , char *[] ) {
-		
-/*	std::vector<shared_ptr<CODEC8>> C = {
-		std::make_shared<Marlin2018>(Distribution::Laplace,12,0,11),
-//		std::make_shared<Marlin2018>(Distribution::Laplace,12,2,11),
-		std::make_shared<Marlin2018>(Distribution::Laplace,12,4,11),
-//		std::make_shared<Marlin2018>(Distribution::Laplace,16,0,11),
-//		std::make_shared<Marlin2018>(Distribution::Laplace,12,6,11),
-//		std::make_shared<Marlin2018>(Distribution::Laplace,16,2,11),
-		std::make_shared<Rice>(),
-		std::make_shared<RLE>(),
-		std::make_shared<Snappy>(),
-		std::make_shared<Nibble>(),
-		std::make_shared<FiniteStateEntropy>(),
-		std::make_shared<Gipfeli>(),
-		std::make_shared<Gzip>(),
-		std::make_shared<Lzo>(),
-		std::make_shared<Huff0>(),
-		std::make_shared<Lz4>(),
-		std::make_shared<Zstd>(),
-		std::make_shared<CharLS>(),
-		std::make_shared<Marlin2019>(Distribution::Laplace),
-	};
-
-	// Testing marlin without deduplication
-	Marlin2018Simple::setConfiguration("dedup",0.);
-	C.push_back(std::make_shared<Marlin2018>(Distribution::Laplace,12,4,11));
-	Marlin2018Simple::setConfiguration("dedup",1.);
-
-*/
-
-	std::map<std::string, double> conf;
-	conf["O"] = 2;
-	conf.emplace("minMarlinSymbols",2);
-//	conf.emplace("autoMaxWordSize",8);
-	conf.emplace("purgeProbabilityThreshold",0.5/4096/256);
-	std::vector<shared_ptr<CODEC8>> C = { 
-		std::make_shared<Marlin2019>(Distribution::Laplace, conf),
-	};
-
-
-	
-	for (auto c : C) 
-		testCorrectness(c);
-
-	ofstream tex("out.tex");
-	
-	tex << "\\documentclass{article}" << endl << "\\usepackage[a4paper, landscape, margin=0cm]{geometry}" << endl << "\\usepackage{tikz}" << endl << "\\usepackage{pgfplots}" << endl << "\\begin{document}" << endl;	
-
-	tex << "\\newcommand{\\customChartSize}{height=3cm, width=5cm,}" << endl;
-
-	tex << R"ML(
-		\newcommand {\compfig}[3]{
-		\begin{tikzpicture} \begin{semilogyaxis}[title=#1, title style={yshift=-1mm},\customChartSize, log origin=infty, log ticks with fixed point, scale only axis, ybar=0pt, enlargelimits=false, bar width=5pt, ymin=0.021544, ymax=46.416, xmin=0, xmax=100, ymajorgrids, major grid style={dotted, gray}, axis y line=right, x tick label style={font={\footnotesize},yshift=1mm}, y tick label style={font={\footnotesize},xshift=-1mm}, xtick=data, ylabel={\emph{GiB/s}}, xlabel={\emph{H(\%)}}, ylabel style={font={\footnotesize},yshift=4mm}, xlabel style={font={\footnotesize},yshift=5.25mm, xshift=29mm}, ]
-		#2
-		\end{semilogyaxis} \begin{axis}[  \customChartSize, scale only axis, axis x line=none, axis y line*=left, ymin=0,ymax=100,xmin=0,xmax=100,enlargelimits=false, y tick label style={font={\footnotesize},xshift=1mm}, y label style={font={\footnotesize},yshift=-3mm}, ylabel={\emph{efficiency (\%)}}, ]
-		#3
-		\end{axis} \end{tikzpicture}
-		})ML";
-
-	tex << "\\begin{figure}" << "  ";
-	tex << "\\centering" << "  ";
-	for (auto c : C) {
-//		if (idx++%2) tex << "%" << std::endl;
-		testAgainstP(c, tex);
-	}
-	tex << "\\caption{";tex << "}" << std::endl;
-	tex << "\\label{fig:";tex << "}" << std::endl;
-	tex << "\\end{figure}" << std::endl << std::endl;
-
-	
-	std::vector<std::string> encodeImages, decodeImages;
-	for (auto c : C) {
-		auto res = testOnIndividualImages(c);
-		encodeImages.push_back(res.first);
-		decodeImages.push_back(res.second);
-		std::cout << res.first << res.second;
-	}
-	
-	std::cout << "Encoding" << std::endl;
-	for (auto e : encodeImages) std::cout << e;
-	std::cout << "Decoding" << std::endl;
-	for (auto e : decodeImages) std::cout << e;
-	
-
-	tex << "\\end{document}" << endl;
 
 	return 0;
 }
