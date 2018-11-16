@@ -116,6 +116,8 @@ public:
 		return pdfByType(N,type,b);
 	}
 
+	static inline std::vector<double> pdf(size_t N, Type type, double h) { return pdfByEntropy(N, type,h); }
+
 	static inline std::array<double,256> pdfByEntropy(Type type, double h) {
 
 		auto P = pdfByEntropy(256, type, h);
@@ -123,6 +125,8 @@ public:
 		for (size_t i=0; i<256; i++) A[i]=P[i];
 		return A;
 	}
+
+	static inline std::array<double,256> pdf(Type type, double h) { return pdfByEntropy(type,h); }
 
 	static inline std::vector<uint8_t> getResiduals(const std::vector<double> &pdf, size_t S) {
 

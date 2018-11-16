@@ -62,13 +62,10 @@ ext:
 	@echo "CREATING $@"
 	@$(CXX) -c -o $@ $< $(CFLAGS)
 
-./bin/benchmark: ./src/benchmark.cc $(CODECS) ext
+./bin/%: ./src/%.cc $(CODECS) ext
 	@echo "CREATING $@" $(CODECS) ext
 	@$(CXX) -o $@ $< $(CODECS) $(LCODECS) $(CFLAGS) $(LFLAGS)
 
-./bin/%: ./src/%.cc ext
-	@echo "CREATING $@" ext
-	@$(CXX) -o $@ $< $(CFLAGS) $(LFLAGS)
 
 prof: ./bin/dcc2017
 	 valgrind --dsymutil=yes --cache-sim=yes --branch-sim=yes --dump-instr=yes --trace-jump=no --tool=callgrind --callgrind-out-file=callgrind.out ./eval 

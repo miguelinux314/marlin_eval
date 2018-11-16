@@ -6,8 +6,9 @@
 
 #include <opencv/cv.h>
 
+//static const int BlockSizeBytes = 4096; // In bytes
 static const int BlockSizeBytes = 4096; // In bytes
-static const int BlockCapacityBytes = 4*4096; // We overprovision each block because some algorithms have compression rates < 1
+static const int BlockCapacityBytes = 4*BlockSizeBytes; // We overprovision each block because some algorithms have compression rates < 1
 
 #ifdef __APPLE__
 namespace{
@@ -21,10 +22,11 @@ void* aligned_alloc( const size_t align, const size_t size)
 }
 #endif
 
-template<typename T, size_t AACapacityBytes = BlockCapacityBytes>
+template<typename T>
 class AlignedArray {
 
 	void copy(const AlignedArray&  p) noexcept {
+		AACapacityBytes = p.AACapacityBytes;
 		sz = p.sz;
 		__m128i *ptr1 = (__m128i *)ptr;
 		const __m128i *ptr2 = (const __m128i *)p.ptr;
@@ -36,7 +38,8 @@ class AlignedArray {
 		}
 	}
 
-	uint8_t *ptr = (uint8_t *)aligned_alloc(64,AACapacityBytes);
+	uint8_t *ptr = (uint8_t *)aligned_alloc(64,4*4096);
+	size_t AACapacityBytes = 4096;
 	size_t sz = 0;
 
 public:
@@ -44,8 +47,12 @@ public:
 	typedef T value_type;
 
 	AlignedArray            (                      ) noexcept {}
-    AlignedArray            (const AlignedArray&  p) noexcept { copy(p); }
-    AlignedArray            (      AlignedArray&& p) noexcept : ptr(p.ptr), sz(p.sz) { p.ptr=nullptr; p.sz = 0; }
+	AlignedArray            (size_t AACapacityBytes) noexcept : 
+		ptr((uint8_t *)aligned_alloc(64,AACapacityBytes)),
+		AACapacityBytes(AACapacityBytes), 
+		sz(0) {}
+    AlignedArray			(const AlignedArray&  p) noexcept { copy(p); }
+    AlignedArray            (      AlignedArray&& p) noexcept : ptr(p.ptr), AACapacityBytes(p.AACapacityBytes), sz(p.sz) { p.ptr=nullptr; p.sz = 0; }
     AlignedArray& operator= (const AlignedArray&  p) noexcept { copy(p); return *this; }
     AlignedArray& operator= (      AlignedArray&& p) noexcept { std::swap(ptr,p.ptr); std::swap(sz, p.sz); return *this; }
 
@@ -53,7 +60,7 @@ public:
 
     ~AlignedArray() { if (ptr!=nullptr) free(ptr); }
 
-    static constexpr size_t capacity() { return AACapacityBytes/sizeof(T); };
+    constexpr size_t capacity() { return AACapacityBytes/sizeof(T); };
     constexpr T & front() { return *begin(); }
     constexpr T * begin() { return (T *)ptr; };
     constexpr T * data() const { return (T *)ptr; };
@@ -213,6 +220,23 @@ struct UncompressedData : public StrippedData<T> {
 		}
 
 		return img;
+	}
+
+
+	// From and to random data
+	explicit UncompressedData(const T *p, size_t sz) noexcept {
+
+		size_t nItemsPerStrip = BlockSizeBytes/sizeof(T);
+		for (size_t i=0; i<sz; i+=nItemsPerStrip)
+			this->emplace_back(&p[i], std::min(sz-i, nItemsPerStrip));
+	}
+	
+	void copyTo(T *p) {
+		
+		for (auto &i : *this) {
+			memcpy(p, i.begin(), i.size()*sizeof(T));
+			p += i.size();
+		}
 	}
 };
 

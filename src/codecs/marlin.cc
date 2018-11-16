@@ -358,7 +358,7 @@ struct MarlinPimpl : public CODEC8Z {
 
 	class Decoder {
 
-		AlignedArray<uint8_t,8<<20> data;
+		AlignedArray<uint8_t> data = AlignedArray<uint8_t>(8<<20);
 		uint maxWordSize;
 		uint dictSize2;
 
