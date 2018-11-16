@@ -8,7 +8,7 @@ LFLAGS += `pkg-config opencv --libs`
 LFLAGS += -lboost_system -lboost_program_options -lboost_serialization
 LFLAGS += -lz -lrt
 
-LCODECS += -lsnappy -lCharLS -lzstd -llz4 -llzo2
+LCODECS += -lsnappy -lCharLS -lzstd -llz4 -llzo2 -lpng -lturbojpeg -lwebp
 
 
 CFLAGS += -fopenmp

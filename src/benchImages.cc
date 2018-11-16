@@ -14,6 +14,7 @@
 
 #include <util/distribution.hpp>
 
+
 #include <codecs/rle.hpp>
 #include <codecs/snappy.hpp>
 #include <codecs/nibble.hpp>
@@ -31,12 +32,21 @@
 #include <codecs/marlin2019.hpp>
 
 #include <uSnippets/log.hpp>
+//#include <uSnippets/mpng.hpp>
+#include <uSnippets/turbojpeg.hpp>
 
+#include <CharLS/interface.h>
+#include <webp/encode.h>
+#include <webp/decode.h>
+
+#include <pstreams/pstream.h>
 
 struct TestTimer {
 	timespec c_start, c_end;
-	void start() { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &c_start); };
-	void stop () { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &c_end); };
+//	void start() { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &c_start); };
+//	void stop () { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &c_end); };
+	void start() { clock_gettime(CLOCK_MONOTONIC, &c_start); };
+	void stop () { clock_gettime(CLOCK_MONOTONIC, &c_end); };
 	double operator()() { return (c_end.tv_sec-c_start.tv_sec) + 1.E-9*(c_end.tv_nsec-c_start.tv_nsec); }
 };
 
@@ -599,7 +609,176 @@ namespace compressors {
 		return predicted;
 	}
 
+	struct ICodec {
+		
+		virtual std::vector<uint8_t> encode(const cv::Mat &) = 0;
+		virtual cv::Mat decode(const std::vector<uint8_t> &, const cv::Mat &) = 0;
+		virtual std::string name() = 0;
+	};
 
+	struct OpenCVCodec : public ICodec {
+		
+		std::string ext;
+		std::vector<int> flags;
+		
+		OpenCVCodec(std::string ext, std::vector<int> flags =std::vector<int>() ) : ext(ext), flags(flags) {}
+
+		
+		virtual std::vector<uint8_t> encode(const cv::Mat &img) { 
+			std::vector<uint8_t> buf;
+			cv::imencode(ext, img, buf, flags);
+			return buf;
+		}
+		
+		virtual cv::Mat decode(const std::vector<uint8_t> &buf, const cv::Mat &) {
+			return cv::imdecode(buf,cv::IMREAD_UNCHANGED);
+		}
+
+		virtual std::string name() { return ext; }
+	};
+	
+	struct EntropyCodec : public ICodec {
+		
+		std::shared_ptr<CODEC8> codec;
+		
+		EntropyCodec(std::shared_ptr<CODEC8> codec) : codec(codec) {}
+		
+		virtual std::vector<uint8_t> encode(const cv::Mat &img) { 
+			
+			cv::Mat1b img1b = predictors::Color2Planar(img.clone(), 2);
+			cv::Mat1b predicted = predictors::Planar2Predicted(img1b.clone(), predictors::PREDICTOR_ABC);
+			cv::Mat1b stripped = compressors::Predicted2Stripped(predicted, 64);
+
+			UncompressedData8 in(stripped.data, stripped.rows*stripped.cols);
+			CompressedData8 compressed;
+				
+			codec->compress(in, compressed);
+			
+			return std::vector<uint8_t>(compressed);
+		}
+		
+		virtual cv::Mat decode(const std::vector<uint8_t> &buf, const cv::Mat &) {
+
+			
+			CompressedData8 compressed(buf);
+			UncompressedData8 uncompressed;
+
+			codec->uncompress(compressed, uncompressed);
+
+			return cv::Mat();
+		}
+		
+		virtual std::string name() { return codec->name(); }
+
+	};
+
+	struct TurboJPEG : public ICodec {
+		
+		virtual std::vector<uint8_t> encode(const cv::Mat &img) { 
+			
+			std::string str;
+			if (img.channels()==1) {
+				str = uSnippets::TJ::code(cv::Mat1b(img),100, TJSAMP_444, TJFLAG_FASTUPSAMPLE |TJFLAG_ACCURATEDCT);
+			} else {
+				str = uSnippets::TJ::code(cv::Mat3b(img),100, TJSAMP_444, TJFLAG_FASTUPSAMPLE |TJFLAG_ACCURATEDCT);
+			}
+			return std::vector<uint8_t>(str.begin(), str.end());
+		}
+		
+		virtual cv::Mat decode(const std::vector<uint8_t> &buf, const cv::Mat &) {
+
+			return uSnippets::TJ::decode<cv::Vec3b>(std::string(buf.begin(), buf.end()), TJFLAG_FASTUPSAMPLE |TJFLAG_ACCURATEDCT);
+		}
+		
+		virtual std::string name() { return "TurboJPEG"; }
+	};
+
+
+	struct CharLS : public ICodec {
+		
+		virtual std::vector<uint8_t> encode(const cv::Mat &img_) { 
+
+			cv::Mat1b img = predictors::Color2Planar(img_.clone(), 2);
+
+			JlsParameters info = JlsParameters();
+			info.components = img.channels();
+			info.bitspersample = 8;
+			info.bytesperline = img.cols*img.channels();
+			info.width = img.cols;
+			info.height = img.rows;
+
+
+			std::vector<uint8_t> ret(img.rows*img.cols*img.channels()*2);
+			size_t compressedLength;
+			JpegLsEncode(&ret[0], ret.capacity(), &compressedLength, img.data, img.rows*img.cols*img.channels(), &info);
+
+			ret.resize(compressedLength);
+			return ret;
+		}
+		
+		virtual cv::Mat decode(const std::vector<uint8_t> &buf, const cv::Mat &in) {
+			
+			cv::Mat out = in.clone();
+			JpegLsDecode(out.data, out.rows*out.cols*out.channels(), &buf[0], buf.size(), nullptr);
+			return out;
+		}
+		
+		virtual std::string name() { return "CharLS"; }
+	};
+
+
+	struct WebP : public ICodec {
+		
+		virtual std::vector<uint8_t> encode(const cv::Mat &img) { 
+
+			if (img.channels()==1) cv::cvtColor(img,img,cv::COLOR_GRAY2BGR);
+
+			uint8_t *out;
+			size_t sz = WebPEncodeLosslessBGR(img.data, img.cols, img.rows, img.cols*3, &out);
+
+			std::vector<uint8_t> ret(out,out+sz);
+			return ret;
+		}
+		
+		virtual cv::Mat decode(const std::vector<uint8_t> &buf, const cv::Mat &in) {
+			return cv::Mat();
+		}
+		
+		virtual std::string name() { return "WebP"; }
+	};
+
+
+	struct CommandLine : public ICodec {
+		
+		std::string cEncode, cDecode;
+		
+		CommandLine(std::string cEncode, std::string cDecode) : cEncode(cEncode), cDecode(cDecode) {}
+		
+		
+		virtual std::vector<uint8_t> encode(const cv::Mat &img) { 
+			
+			cv::imwrite("/tmp/in.bmp", img);
+			
+			system(cEncode.c_str());
+			
+			std::ifstream iss("/tmp/out.file");
+			
+			iss.seekg(0, std::ios::end);   
+			size_t sz = iss.tellg();
+			iss.seekg(0, std::ios::beg);
+			
+			std::vector<uint8_t> ret(sz);
+			iss.read((char *)&ret[0],sz);
+			return ret;
+		}
+		
+		virtual cv::Mat decode(const std::vector<uint8_t> &buf, const cv::Mat &in) {
+			system(cDecode.c_str());
+			return cv::Mat();
+		}
+		
+		virtual std::string name() { return cEncode; }
+	};
 }
 
 	
@@ -875,60 +1054,65 @@ int main(int argc, char **argv) {
 		baseConf.emplace("numDict",8);
 		baseConf.emplace("autoMaxWordSize",7);		
 
-		std::vector<std::shared_ptr<CODEC8>> C = {
-//			std::make_shared<Rice>(),
-//			std::make_shared<RLE>(),
-//			std::make_shared<Snappy>(),
-//			std::make_shared<Nibble>(),
-//			std::make_shared<FiniteStateEntropy>(),
-//			std::make_shared<Gipfeli>(),
-//			std::make_shared<Gzip>(),
-//			std::make_shared<Lzo>(),
-//			std::make_shared<Huff0>(),
-			std::make_shared<Lz4>(),
-			std::make_shared<Zstd>(),
-			std::make_shared<Marlin2019>(Distribution::Laplace,baseConf),
-			std::make_shared<CharLS>(),
+		std::vector<std::shared_ptr<compressors::ICodec>> Codecs = {
+			std::make_shared<compressors::EntropyCodec>(std::make_shared<Rice>()),
+			std::make_shared<compressors::EntropyCodec>(std::make_shared<RLE>()),
+			std::make_shared<compressors::EntropyCodec>(std::make_shared<Snappy>()),
+			std::make_shared<compressors::EntropyCodec>(std::make_shared<Nibble>()),
+			std::make_shared<compressors::EntropyCodec>(std::make_shared<FiniteStateEntropy>()),
+			std::make_shared<compressors::EntropyCodec>(std::make_shared<Gipfeli>()),
+			std::make_shared<compressors::EntropyCodec>(std::make_shared<Gzip>()),
+			std::make_shared<compressors::EntropyCodec>(std::make_shared<Lzo>()),
+			std::make_shared<compressors::EntropyCodec>(std::make_shared<Huff0>()),
+			std::make_shared<compressors::EntropyCodec>(std::make_shared<Lz4>()),
+			std::make_shared<compressors::EntropyCodec>(std::make_shared<Zstd>()),
+			std::make_shared<compressors::EntropyCodec>(std::make_shared<Marlin2019>(Distribution::Laplace,baseConf)),
+			std::make_shared<compressors::EntropyCodec>(std::make_shared<CharLS>()),
+			
+			std::make_shared<compressors::OpenCVCodec>(".jp2",std::vector<int>{}),
+			std::make_shared<compressors::OpenCVCodec>(".jpg",std::vector<int>{CV_IMWRITE_JPEG_QUALITY,200}),
+			std::make_shared<compressors::OpenCVCodec>(".jpg",std::vector<int>{CV_IMWRITE_JPEG_QUALITY,200,3,1}),
+			std::make_shared<compressors::OpenCVCodec>(".png",std::vector<int>{CV_IMWRITE_PNG_COMPRESSION,9,CV_IMWRITE_PNG_STRATEGY, CV_IMWRITE_PNG_STRATEGY_DEFAULT}),
+			std::make_shared<compressors::OpenCVCodec>(".png",std::vector<int>{CV_IMWRITE_PNG_COMPRESSION,9,CV_IMWRITE_PNG_STRATEGY, CV_IMWRITE_PNG_STRATEGY_FILTERED}),
+			std::make_shared<compressors::TurboJPEG>(),
+			std::make_shared<compressors::CharLS>(),
+			std::make_shared<compressors::WebP>(),
+			std::make_shared<compressors::CommandLine>("cp /tmp/in.bmp /tmp/out.file", "cp /tmp/out.file /tmp/out.bmp"),
+			std::make_shared<compressors::CommandLine>("./izc.sh", "./izd.sh"),
+			std::make_shared<compressors::CommandLine>("./flifc.sh", "./flifd.sh"),
 		};
 		
-		for (auto codec : C) {
+		for (auto codec : Codecs) {
 
 			std::vector<double> compressSpeed, uncompressSpeed, compressionRate;
 
 			for (auto &img : images) {
 				
-				cv::Mat1b img1b = predictors::Color2Planar(img.clone(), 2);
-				cv::Mat1b predicted = predictors::Planar2Predicted(img1b.clone(), predictors::PREDICTOR_ABC);
-				cv::Mat1b stripped = compressors::Predicted2Stripped(predicted, 64);
-						
-
-				UncompressedData8 in(stripped.data, stripped.rows*stripped.cols);
-				CompressedData8 compressed;
-				UncompressedData8 uncompressed;
+				std::vector<uint8_t> buf;
 				
 				TestTimer compressTimer, uncompressTimer;
 				size_t nComp = 1, nUncomp = 1;
 				do {
 					nComp *= 2;
-					codec->compress(in, compressed);
+					buf = codec->encode(img);
 					compressTimer.start();
 					for (size_t t=0; t<nComp; t++)
-						codec->compress(in, compressed);
+						buf = codec->encode(img);
 					compressTimer.stop();
 				} while (compressTimer()<.01);
 
 				do {
 					nUncomp *= 2;
-					codec->uncompress(compressed, uncompressed);
+					cv::Mat3b decimg = codec->decode(buf,img);
 					uncompressTimer.start();
 					for (size_t t=0; t<nUncomp; t++)
-						codec->uncompress(compressed, uncompressed);
+						decimg = codec->decode(buf,img);
 					uncompressTimer.stop();
 				} while (uncompressTimer()<.01);
 
-				compressSpeed.push_back(nComp*in.nBytes()/  compressTimer());
-				uncompressSpeed.push_back(nUncomp*in.nBytes()/  uncompressTimer());
-				compressionRate.push_back(double(compressed.nBytes())/double(in.nBytes()));
+				compressSpeed.push_back(nComp*img.rows*img.cols*img.channels()/  compressTimer());
+				uncompressSpeed.push_back(nUncomp*img.rows*img.cols*img.channels()/  uncompressTimer());
+				compressionRate.push_back(double(buf.size())/double(img.rows*img.cols*img.channels()));
 				
 				//uSnippets::Log(0) << nComp << " " << in.nBytes() << " " << compressTimer();
 			}
@@ -944,6 +1128,8 @@ int main(int argc, char **argv) {
 			std::cout << "" << 1./meanCompressionRate << " " << (meanUncompressSpeed/(1<<20)) << " " << codec->name() << " {west}" << std::endl;
 
 		}
+	
+	
 	} else
 
 	return 0;

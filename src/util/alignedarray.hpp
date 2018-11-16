@@ -244,7 +244,20 @@ struct UncompressedData : public StrippedData<T> {
 template<typename T>
 struct CompressedData : public StrippedData<T> {
 
-	std::string toString() {
+	CompressedData() noexcept {};
+
+	// From and to vector
+	explicit CompressedData(const std::vector<T> &data) noexcept 
+		{ fromString(std::string(data.begin(), data.end())); }
+
+	explicit operator std::vector<T>() const noexcept {
+		std::string str = this->toString();
+		return std::vector<T>(str.begin(), str.end());
+	};
+
+
+
+	std::string toString() const {
 
 		std::ostringstream oss;
 		uint32_t nBlocks = this->size();
