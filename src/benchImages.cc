@@ -1061,7 +1061,7 @@ int main(int argc, char **argv) {
 			std::make_shared<compressors::EntropyCodec>(std::make_shared<Nibble>()),
 			std::make_shared<compressors::EntropyCodec>(std::make_shared<FiniteStateEntropy>()),
 			std::make_shared<compressors::EntropyCodec>(std::make_shared<Gipfeli>()),
-			std::make_shared<compressors::EntropyCodec>(std::make_shared<Gzip>()),
+//			std::make_shared<compressors::EntropyCodec>(std::make_shared<Gzip>()),
 			std::make_shared<compressors::EntropyCodec>(std::make_shared<Lzo>()),
 			std::make_shared<compressors::EntropyCodec>(std::make_shared<Huff0>()),
 			std::make_shared<compressors::EntropyCodec>(std::make_shared<Lz4>()),
