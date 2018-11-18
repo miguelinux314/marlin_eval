@@ -18,7 +18,7 @@ CFLAGS += -Ofast
 
 CFLAGS += -g
 #CFLAGS += -g -O0
-CFLAGS += -g -O2 -march=native
+CFLAGS += -g -Ofast -march=native
 
 CFLAGS += -I./ext
 LFLAGS += $(wildcard ./ext/*.a)

@@ -663,7 +663,7 @@ namespace compressors {
 			return std::vector<uint8_t>(compressed);
 		}
 		
-		virtual cv::Mat decode(const std::vector<uint8_t> &buf, const cv::Mat &in) {
+		virtual cv::Mat decode(const std::vector<uint8_t> &buf, const cv::Mat &) {
 
 			
 			CompressedData8 compressed(buf);
@@ -1158,10 +1158,13 @@ int main(int argc, char **argv) {
 
 		for (auto &&nCores : std::vector<int>{ 1 }) {
 		for (auto &&testType : std::vector<TestType>{ 
-//			{"Rotational",200*double(1<<20),0.01}, 
-//			{"SSD SATA-600",600*double(1<<20),0.0001}, 
+			{"Rotational",200*double(1<<20),0.01}, 
+			{"SSD SATA-600",600*double(1<<20),0.0001}, 
 			{"Net 1GB",100*double(1<<20),0.00000}, 
+			{"Net 10GB",1000*double(1<<20),0.00000}, 
 			}) {
+				
+			uSnippets::Log(1) << "Tes: " << testType.name << ". Bandwidth: " << testType.bandwidth << " MiB/s, Seek time: " << testType.seekTime*1000 << "ms.";
 		for (auto codec : getCodecs()) {
 
 			typedef std::pair<std::vector<uint8_t>, cv::Mat> Msg;
@@ -1175,8 +1178,6 @@ int main(int argc, char **argv) {
 
 			std::deque< std::shared_ptr<Msg>> processingQueue;
 			
-			
-			uSnippets::Log(0) << "What!";
 			size_t imagesDone = 0;
 			bool done = false;
 			
