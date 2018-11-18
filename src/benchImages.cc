@@ -658,7 +658,6 @@ namespace compressors {
 
 			UncompressedData8 in(stripped.data, stripped.rows*stripped.cols);
 			CompressedData8 compressed;
-				
 			codec->compress(in, compressed);
 			
 			return std::vector<uint8_t>(compressed);
@@ -668,11 +667,9 @@ namespace compressors {
 
 			
 			CompressedData8 compressed(buf);
-			UncompressedData8 uncompressed;
-			uncompressed.resize(in.rows*in.cols*4);
-
-			codec->uncompress(compressed, uncompressed);
-
+			UncompressedData8 out;
+			
+			codec->uncompress(compressed, out);
 			return cv::Mat();
 		}
 		
@@ -866,11 +863,11 @@ static std::vector<std::shared_ptr<compressors::ICodec>> getCodecs() {
 	baseConf.emplace("autoMaxWordSize",7);		
 
 	return std::vector<std::shared_ptr<compressors::ICodec>>{
+		std::make_shared<compressors::EntropyCodec>(std::make_shared<Lz4>()),
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<Rice>()),
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<RLE>()),
 //		std::make_shared<compressors::EntropyCodec>(std::make_shared<Snappy>()),
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<Nibble>()),
-		std::make_shared<compressors::EntropyCodec>(std::make_shared<Lz4>()),
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<FiniteStateEntropy>()),
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<Gipfeli>()),
 //			std::make_shared<compressors::EntropyCodec>(std::make_shared<Gzip>()),
@@ -1163,7 +1160,7 @@ int main(int argc, char **argv) {
 		for (auto &&testType : std::vector<TestType>{ 
 //			{"Rotational",200*double(1<<20),0.01}, 
 //			{"SSD SATA-600",600*double(1<<20),0.0001}, 
-			{"Net 1GB",100*double(1<<20),0.0001}, 
+			{"Net 1GB",100*double(1<<20),0.00000}, 
 			}) {
 		for (auto codec : getCodecs()) {
 

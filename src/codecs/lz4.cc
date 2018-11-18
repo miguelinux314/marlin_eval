@@ -11,7 +11,11 @@ class Lz4Pimpl : public CODEC8AA {
 	}
 
 	void uncompress(const AlignedArray8 &in, AlignedArray8 &out) const {
-		LZ4_decompress_fast((const char *)in.begin(), (char *)out.begin(), out.size());
+		//printf("IN: %ld %ld\n", in.size(), out.size()); fflush(stdout);
+		//LZ4_decompress_fast((const char *)in.begin(), (char *)out.begin(), out.size());
+		LZ4_decompress_safe((const char *)in.begin(), (char *)out.begin(), in.size(), out.size());
+		//printf("OUT: %ld %ld\n", in.size(), out.size()); fflush(stdout);
+
 	}
 };
 
