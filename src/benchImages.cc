@@ -33,7 +33,12 @@
 
 #include <uSnippets/log.hpp>
 //#include <uSnippets/mpng.hpp>
+
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-qual"
 #include <uSnippets/turbojpeg.hpp>
+#pragma GCC diagnostic pop
 
 #include <CharLS/interface.h>
 #include <webp/encode.h>
@@ -624,21 +629,23 @@ namespace compressors {
 		OpenCVCodec(std::string ext, std::vector<int> flags =std::vector<int>() ) : ext(ext), flags(flags) {}
 
 		
-		virtual std::vector<uint8_t> encode(const cv::Mat &img) { 
+		virtual std::vector<uint8_t> encode(const cv::Mat &img_) { 
+
+			cv::Mat img = img_;
 			std::vector<uint8_t> buf;
 			cv::imencode(ext, img, buf, flags);
 			return buf;
 		}
 		
 		virtual cv::Mat decode(const std::vector<uint8_t> &buf, const cv::Mat &) {
-			return cv::imdecode(buf,cv::IMREAD_UNCHANGED);
+			return cv::imdecode(buf,cv::IMREAD_COLOR);
 		}
 
 		virtual std::string name() { return ext; }
 	};
 	
 	struct EntropyCodec : public ICodec {
-		
+
 		std::shared_ptr<CODEC8> codec;
 		
 		EntropyCodec(std::shared_ptr<CODEC8> codec) : codec(codec) {}
@@ -647,7 +654,7 @@ namespace compressors {
 			
 			cv::Mat1b img1b = predictors::Color2Planar(img.clone(), 2);
 			cv::Mat1b predicted = predictors::Planar2Predicted(img1b.clone(), predictors::PREDICTOR_ABC);
-			cv::Mat1b stripped = compressors::Predicted2Stripped(predicted, 64);
+			cv::Mat1b stripped = compressors::Predicted2Stripped(predicted, 32);
 
 			UncompressedData8 in(stripped.data, stripped.rows*stripped.cols);
 			CompressedData8 compressed;
@@ -657,11 +664,12 @@ namespace compressors {
 			return std::vector<uint8_t>(compressed);
 		}
 		
-		virtual cv::Mat decode(const std::vector<uint8_t> &buf, const cv::Mat &) {
+		virtual cv::Mat decode(const std::vector<uint8_t> &buf, const cv::Mat &in) {
 
 			
 			CompressedData8 compressed(buf);
 			UncompressedData8 uncompressed;
+			uncompressed.resize(in.rows*in.cols*4);
 
 			codec->uncompress(compressed, uncompressed);
 
@@ -721,27 +729,58 @@ namespace compressors {
 			cv::Mat out = in.clone();
 			JpegLsDecode(out.data, out.rows*out.cols*out.channels(), &buf[0], buf.size(), nullptr);
 			return out;
+			//return in;
 		}
 		
 		virtual std::string name() { return "CharLS"; }
 	};
 
+	struct Memcpy : public ICodec {
+		
+		virtual std::vector<uint8_t> encode(const cv::Mat &img_) { 
+
+			std::vector<uint8_t> ret(img_.rows*img_.cols*img_.channels());
+			memcpy(&ret[0], img_.data, ret.size());
+			return ret;
+		}
+		
+		virtual cv::Mat decode(const std::vector<uint8_t> &buf, const cv::Mat &in) {
+
+			cv::Mat out = in.clone();
+			memcpy(out.data, &buf[0], buf.size());
+			return out;
+		}
+		
+		virtual std::string name() { return "Memcpy"; }
+	};
+
 
 	struct WebP : public ICodec {
 		
-		virtual std::vector<uint8_t> encode(const cv::Mat &img) { 
+		virtual std::vector<uint8_t> encode(const cv::Mat &img_) { 
 
-			if (img.channels()==1) cv::cvtColor(img,img,cv::COLOR_GRAY2BGR);
+			cv::Mat img = img_;
+			if (img.channels()==1) cv::cvtColor(img.clone(),img,cv::COLOR_GRAY2BGR);
 
 			uint8_t *out;
 			size_t sz = WebPEncodeLosslessBGR(img.data, img.cols, img.rows, img.cols*3, &out);
 
 			std::vector<uint8_t> ret(out,out+sz);
+			free(out);
+			
 			return ret;
 		}
 		
 		virtual cv::Mat decode(const std::vector<uint8_t> &buf, const cv::Mat &in) {
-			return cv::Mat();
+			
+			int width, height;
+			uint8_t * out = WebPDecodeBGR(&buf[0], buf.size(), &width, &height);
+			cv::Mat ret = cv::Mat3b(in.rows,in.cols,(cv::Vec3b *)out).clone();
+			free(out);
+			
+			if (in.channels()==1) cv::cvtColor(ret,ret,cv::COLOR_BGR2GRAY);
+
+			return ret;
 		}
 		
 		virtual std::string name() { return "WebP"; }
@@ -759,7 +798,9 @@ namespace compressors {
 			
 			cv::imwrite("/tmp/in.bmp", img);
 			
-			system(cEncode.c_str());
+			int systemret = system(cEncode.c_str());
+			if (systemret) {}
+			
 			
 			std::ifstream iss("/tmp/out.file");
 			
@@ -772,8 +813,11 @@ namespace compressors {
 			return ret;
 		}
 		
-		virtual cv::Mat decode(const std::vector<uint8_t> &buf, const cv::Mat &in) {
-			system(cDecode.c_str());
+		virtual cv::Mat decode(const std::vector<uint8_t> &, const cv::Mat &) {
+			
+			int systemret = system(cDecode.c_str());
+			if (systemret) {}
+
 			return cv::Mat();
 		}
 		
@@ -781,44 +825,86 @@ namespace compressors {
 	};
 }
 
-	
-int main(int argc, char **argv) {
-	
-//	cv::Mat1b aa(1,1,-1), bb(1,1,2);
-//	uSnippets::Log(0) << aa << " " << bb-aa;
-//	exit(-1);
-	
-	static const int sampleSize = 16;
-	
-	uSnippets::Assert(argc>1) << "must specify test";
-	
+std::vector<cv::Mat> loadImages(int argc, char **argv,size_t sampleSize) {
+
 	std::vector<std::string> filenames;
 	for (int i=2; i<argc; i++)
 		for (auto &&f : getAllFilenames(argv[i], {"png", "jpg", "JPEG"}) )
 			filenames.push_back(f);
 
-	uSnippets::Assert(!filenames.empty()) << "must specify dataset paths";
-			
-	//for (auto &&f : filenames) 
-	//	std::cout << f << std::endl;
+	uSnippets::Assert(!filenames.empty()) << "must specify dataset paths";				
+		
+	std::random_shuffle(filenames.begin(), filenames.end());
+	if (filenames.size()>sampleSize) filenames.resize(sampleSize);
 	
+	uSnippets::Log(0) << "Reading Images";
+	std::vector<cv::Mat> images;
+	for (auto &f : filenames) {
+		
+		cv::Mat img = cv::imread(f,cv::IMREAD_UNCHANGED);
+		uSnippets::Assert(img.rows>=32) << "Img.rows " << img.rows;
+		uSnippets::Assert(img.cols>=32) << "Img.cols " << img.rows;
+		
+		img = img(cv::Rect(0,0,img.cols & 0xFFE0,img.rows & 0xFFE0)).clone();
+		
+		images.push_back(img);
+	}
+
+	uSnippets::Log(0) << "Images Read";	
+	
+	return images;
+}
+
+
+static std::vector<std::shared_ptr<compressors::ICodec>> getCodecs() {
+
+	std::map<std::string, double> baseConf;
+	baseConf["O"] = 2;
+	baseConf["K"] = 8;	
+	baseConf.emplace("iterations",2);
+	baseConf.emplace("numDict",8);
+	baseConf.emplace("autoMaxWordSize",7);		
+
+	return std::vector<std::shared_ptr<compressors::ICodec>>{
+		std::make_shared<compressors::EntropyCodec>(std::make_shared<Rice>()),
+		std::make_shared<compressors::EntropyCodec>(std::make_shared<RLE>()),
+//		std::make_shared<compressors::EntropyCodec>(std::make_shared<Snappy>()),
+		std::make_shared<compressors::EntropyCodec>(std::make_shared<Nibble>()),
+		std::make_shared<compressors::EntropyCodec>(std::make_shared<Lz4>()),
+		std::make_shared<compressors::EntropyCodec>(std::make_shared<FiniteStateEntropy>()),
+		std::make_shared<compressors::EntropyCodec>(std::make_shared<Gipfeli>()),
+//			std::make_shared<compressors::EntropyCodec>(std::make_shared<Gzip>()),
+		std::make_shared<compressors::EntropyCodec>(std::make_shared<Lzo>()),
+		std::make_shared<compressors::EntropyCodec>(std::make_shared<Huff0>()),
+		std::make_shared<compressors::EntropyCodec>(std::make_shared<Zstd>()),
+		std::make_shared<compressors::EntropyCodec>(std::make_shared<Marlin2019>(Distribution::Laplace,baseConf)),
+//		std::make_shared<compressors::EntropyCodec>(std::make_shared<CharLS>()),
+		
+//		std::make_shared<compressors::OpenCVCodec>(".jp2",std::vector<int>{}),
+//		std::make_shared<compressors::OpenCVCodec>(".png",std::vector<int>{CV_IMWRITE_PNG_COMPRESSION,1,CV_IMWRITE_PNG_STRATEGY, CV_IMWRITE_PNG_STRATEGY_HUFFMAN_ONLY}),
+//		std::make_shared<compressors::OpenCVCodec>(".png",std::vector<int>{CV_IMWRITE_PNG_COMPRESSION,1,CV_IMWRITE_PNG_STRATEGY, CV_IMWRITE_PNG_STRATEGY_RLE}),
+//		std::make_shared<compressors::OpenCVCodec>(".png",std::vector<int>{CV_IMWRITE_PNG_COMPRESSION,9,CV_IMWRITE_PNG_STRATEGY, CV_IMWRITE_PNG_STRATEGY_DEFAULT}),
+//		std::make_shared<compressors::OpenCVCodec>(".png",std::vector<int>{CV_IMWRITE_PNG_COMPRESSION,9,CV_IMWRITE_PNG_STRATEGY, CV_IMWRITE_PNG_STRATEGY_FILTERED}),
+//		std::make_shared<compressors::OpenCVCodec>(".jpg",std::vector<int>{CV_IMWRITE_JPEG_QUALITY,100}),
+		std::make_shared<compressors::TurboJPEG>(),
+		std::make_shared<compressors::CharLS>(),
+//		std::make_shared<compressors::WebP>(),
+		std::make_shared<compressors::Memcpy>(),
+		
+//		std::make_shared<compressors::CommandLine>("cp /tmp/in.bmp /tmp/out.file", "cp /tmp/out.file /tmp/out.bmp"),
+//		std::make_shared<compressors::CommandLine>("./izc.sh", "./izd.sh"),
+//		std::make_shared<compressors::CommandLine>("./flifc.sh", "./flifd.sh"),
+	};
+}
+	
+int main(int argc, char **argv) {
+	
+	uSnippets::Assert(argc>1) << "must specify test";
+	
+	std::vector<cv::Mat> images = loadImages(argc, argv, 16);
+				
 	if (std::string(argv[1])=="analyzePredictors") {
 		
-		std::random_shuffle(filenames.begin(), filenames.end());
-		if (filenames.size()>sampleSize) filenames.resize(sampleSize);
-		
-		uSnippets::Log(0) << "Reading Images";
-		std::vector<cv::Mat> images;
-		for (auto &f : filenames) {
-			
-			cv::Mat img = cv::imread(f,cv::IMREAD_UNCHANGED);
-			uSnippets::Assert(img.rows) << "Img.rows " << img.rows;
-			uSnippets::Assert(img.cols) << "Img.cols " << img.rows;
-			images.push_back(img);
-		}
-
-		uSnippets::Log(0) << "Images Read";
-
 		for (auto &&imageBlockWidth : std::vector<size_t>{8,16,32}) {
 
 
@@ -875,22 +961,6 @@ int main(int argc, char **argv) {
 		}
 	} else if (std::string(argv[1])=="buildCustomDictionary") {
 		
-		
-		
-			
-		
-		std::random_shuffle(filenames.begin(), filenames.end());
-		if (filenames.size()>sampleSize) filenames.resize(sampleSize);
-		
-		uSnippets::Log(0) << "Reading Images";
-		std::vector<cv::Mat> images;
-		for (auto &f : filenames)
-			images.push_back(cv::imread(f,cv::IMREAD_UNCHANGED));
-
-		uSnippets::Log(0) << "Images Read";
-
-
-
 		for (auto &&numDict : std::vector<size_t>{8, 32}) {
 
 			for (auto &&customDict : std::vector<size_t>{0, 8, 16, 32}) {
@@ -1033,56 +1103,9 @@ int main(int argc, char **argv) {
 				}
 			}
 		}
-	} else if (std::string(argv[1])=="testCompression") {
-		
-		std::random_shuffle(filenames.begin(), filenames.end());
-		if (filenames.size()>sampleSize) filenames.resize(sampleSize);
-		
-		uSnippets::Log(0) << "Reading Images";
-		std::vector<cv::Mat> images;
-		for (auto &f : filenames) {
-			cv::Mat img = cv::imread(f,cv::IMREAD_UNCHANGED);
-			images.push_back(img);
-		}
+	} else if (std::string(argv[1])=="testCompressionThoroughput") {
 
-		uSnippets::Log(0) << "Images Read";
-		
-		std::map<std::string, double> baseConf;
-		baseConf["O"] = 2;
-		baseConf["K"] = 8;	
-		baseConf.emplace("iterations",2);
-		baseConf.emplace("numDict",8);
-		baseConf.emplace("autoMaxWordSize",7);		
-
-		std::vector<std::shared_ptr<compressors::ICodec>> Codecs = {
-			std::make_shared<compressors::EntropyCodec>(std::make_shared<Rice>()),
-			std::make_shared<compressors::EntropyCodec>(std::make_shared<RLE>()),
-			std::make_shared<compressors::EntropyCodec>(std::make_shared<Snappy>()),
-			std::make_shared<compressors::EntropyCodec>(std::make_shared<Nibble>()),
-			std::make_shared<compressors::EntropyCodec>(std::make_shared<FiniteStateEntropy>()),
-			std::make_shared<compressors::EntropyCodec>(std::make_shared<Gipfeli>()),
-//			std::make_shared<compressors::EntropyCodec>(std::make_shared<Gzip>()),
-			std::make_shared<compressors::EntropyCodec>(std::make_shared<Lzo>()),
-			std::make_shared<compressors::EntropyCodec>(std::make_shared<Huff0>()),
-			std::make_shared<compressors::EntropyCodec>(std::make_shared<Lz4>()),
-			std::make_shared<compressors::EntropyCodec>(std::make_shared<Zstd>()),
-			std::make_shared<compressors::EntropyCodec>(std::make_shared<Marlin2019>(Distribution::Laplace,baseConf)),
-			std::make_shared<compressors::EntropyCodec>(std::make_shared<CharLS>()),
-			
-			std::make_shared<compressors::OpenCVCodec>(".jp2",std::vector<int>{}),
-			std::make_shared<compressors::OpenCVCodec>(".jpg",std::vector<int>{CV_IMWRITE_JPEG_QUALITY,200}),
-			std::make_shared<compressors::OpenCVCodec>(".jpg",std::vector<int>{CV_IMWRITE_JPEG_QUALITY,200,3,1}),
-			std::make_shared<compressors::OpenCVCodec>(".png",std::vector<int>{CV_IMWRITE_PNG_COMPRESSION,9,CV_IMWRITE_PNG_STRATEGY, CV_IMWRITE_PNG_STRATEGY_DEFAULT}),
-			std::make_shared<compressors::OpenCVCodec>(".png",std::vector<int>{CV_IMWRITE_PNG_COMPRESSION,9,CV_IMWRITE_PNG_STRATEGY, CV_IMWRITE_PNG_STRATEGY_FILTERED}),
-			std::make_shared<compressors::TurboJPEG>(),
-			std::make_shared<compressors::CharLS>(),
-			std::make_shared<compressors::WebP>(),
-			std::make_shared<compressors::CommandLine>("cp /tmp/in.bmp /tmp/out.file", "cp /tmp/out.file /tmp/out.bmp"),
-			std::make_shared<compressors::CommandLine>("./izc.sh", "./izd.sh"),
-			std::make_shared<compressors::CommandLine>("./flifc.sh", "./flifd.sh"),
-		};
-		
-		for (auto codec : Codecs) {
+		for (auto codec : getCodecs()) {
 
 			std::vector<double> compressSpeed, uncompressSpeed, compressionRate;
 
@@ -1103,10 +1126,10 @@ int main(int argc, char **argv) {
 
 				do {
 					nUncomp *= 2;
-					cv::Mat3b decimg = codec->decode(buf,img);
+					codec->decode(buf,img);
 					uncompressTimer.start();
 					for (size_t t=0; t<nUncomp; t++)
-						decimg = codec->decode(buf,img);
+						codec->decode(buf,img);
 					uncompressTimer.stop();
 				} while (uncompressTimer()<.01);
 
@@ -1130,7 +1153,96 @@ int main(int argc, char **argv) {
 		}
 	
 	
-	} else
+	} else if (std::string(argv[1])=="testNetworkAndDisk") {
+		
+		
+		
+		struct TestType { std::string name; double bandwidth, seekTime; };
 
+		for (auto &&nCores : std::vector<int>{ 1 }) {
+		for (auto &&testType : std::vector<TestType>{ 
+//			{"Rotational",200*double(1<<20),0.01}, 
+//			{"SSD SATA-600",600*double(1<<20),0.0001}, 
+			{"Net 1GB",100*double(1<<20),0.0001}, 
+			}) {
+		for (auto codec : getCodecs()) {
+
+			typedef std::pair<std::vector<uint8_t>, cv::Mat> Msg;
+
+			std::vector<std::shared_ptr<Msg>> compressedMessages;
+			for (auto &img : images)
+				compressedMessages.push_back( std::make_shared<Msg>( codec->encode(img), img));
+				
+			std::mutex mtx;
+			typedef std::lock_guard<std::mutex> Lock;
+
+			std::deque< std::shared_ptr<Msg>> processingQueue;
+			
+			
+			uSnippets::Log(0) << "What!";
+			size_t imagesDone = 0;
+			bool done = false;
+			
+			std::thread producer([&](){
+
+				auto ip = compressedMessages.begin();
+				while (!done) {
+					
+					if (ip==compressedMessages.end()) ip = compressedMessages.begin();
+					auto msgptr = *ip++;
+					
+
+					{
+						Lock l(mtx);
+						if (processingQueue.size()<100)
+							processingQueue.push_back(msgptr);
+					}
+					
+					double bandwidthTime = msgptr->first.size()/testType.bandwidth;
+					
+					//uSnippets::Log(0) << uint64_t(testType.seekTime*1e9) << " " << uint64_t(bandwidthTime*1e9);
+					
+					std::this_thread::sleep_for(
+						std::chrono::nanoseconds(
+							uint64_t(std::max(testType.seekTime,bandwidthTime)*1e9)));
+				};
+			});
+
+			std::vector<std::thread> consumers;
+			for (int i=0; i<nCores; i++) consumers.emplace_back([&](){
+				
+				while (!done) {
+					
+					std::shared_ptr<Msg> msgptr;
+					{
+						Lock l(mtx);
+						if (not processingQueue.empty()) {
+							msgptr = processingQueue.front();
+							processingQueue.pop_front();
+						}
+					}
+					if (not msgptr) {
+						std::this_thread::sleep_for(std::chrono::milliseconds(1));
+						continue;
+					}
+					
+					codec->decode( msgptr->first, msgptr->second );
+					imagesDone++;
+					std::this_thread::yield();
+				};	
+			});
+			
+			std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+			done = true;
+			producer.join();
+			for (auto &&t : consumers) t.join();
+			
+			uSnippets::Log(1) << codec->name() << ": " << imagesDone << " Images/second";
+			
+		}
+		}
+		}
+	} 
+	
 	return 0;
 }

@@ -18,13 +18,14 @@ CFLAGS += -Ofast
 
 CFLAGS += -g
 #CFLAGS += -g -O0
-CFLAGS += -g -Ofast
+CFLAGS += -g -O2 -march=native
 
 CFLAGS += -I./ext
 LFLAGS += $(wildcard ./ext/*.a)
 
 
 #CFLAGS += -DNDEBUG
+CFLAGS += -fno-inline-functions
 #CFLAGS += -frename-registers -fopenmp
 #CFLAGS += -fno-unroll-loops
 #CFLAGS += -funroll-all-loops
