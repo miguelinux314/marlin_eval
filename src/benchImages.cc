@@ -1156,7 +1156,7 @@ int main(int argc, char **argv) {
 		
 		struct TestType { std::string name; double bandwidth, seekTime; };
 
-		for (auto &&nCores : std::vector<int>{ 1 }) {
+		for (auto &&nCores : std::vector<int>{ 4 }) {
 		for (auto &&testType : std::vector<TestType>{ 
 			{"Rotational",200*double(1<<20),0.01}, 
 			{"SSD SATA-600",600*double(1<<20),0.0001}, 
@@ -1164,7 +1164,7 @@ int main(int argc, char **argv) {
 			{"Net 10GB",1000*double(1<<20),0.00000}, 
 			}) {
 				
-			uSnippets::Log(1) << "Tes: " << testType.name << ". Bandwidth: " << testType.bandwidth << " MiB/s, Seek time: " << testType.seekTime*1000 << "ms.";
+			uSnippets::Log(2) << "Tes: " << testType.name << ". Bandwidth: " << (testType.bandwidth/(1<<20)) << " MiB/s, Seek time: " << testType.seekTime*1000 << "ms.";
 		for (auto codec : getCodecs()) {
 
 			typedef std::pair<std::vector<uint8_t>, cv::Mat> Msg;
