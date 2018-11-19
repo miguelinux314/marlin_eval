@@ -883,7 +883,7 @@ static std::vector<std::shared_ptr<compressors::ICodec>> getCodecs() {
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<Rice>()),
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<RLE>()),
 //		std::make_shared<compressors::EntropyCodec>(std::make_shared<Snappy>()),
-//		std::make_shared<compressors::EntropyCodec>(std::make_shared<Nibble>()),
+		std::make_shared<compressors::EntropyCodec>(std::make_shared<Nibble>()),
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<FiniteStateEntropy>(), false),
 //		std::make_shared<compressors::EntropyCodec>(std::make_shared<Gipfeli>()),
 //			std::make_shared<compressors::EntropyCodec>(std::make_shared<Gzip>()),
