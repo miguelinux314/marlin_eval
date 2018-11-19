@@ -876,7 +876,7 @@ static std::vector<std::shared_ptr<compressors::ICodec>> getCodecs() {
 	baseConf["K"] = 8;	
 	baseConf.emplace("iterations",2);
 	baseConf.emplace("numDict",8);
-	baseConf.emplace("autoMaxWordSize",7);		
+	baseConf.emplace("autoMaxWordSize",256);		
 
 	return std::vector<std::shared_ptr<compressors::ICodec>>{
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<Lz4>()),
@@ -915,6 +915,8 @@ int main(int argc, char **argv) {
 	uSnippets::Assert(argc>1) << "must specify test";
 	
 	std::vector<cv::Mat> images = loadImages(argc, argv, 64);
+	
+	auto codecs = getCodecs();
 				
 	if (std::string(argv[1])=="analyzePredictors") {
 		
@@ -1179,13 +1181,17 @@ int main(int argc, char **argv) {
 			}) {
 				
 			uSnippets::Log(2) << "Tes: " << testType.name << ". Bandwidth: " << (testType.bandwidth/(1<<20)) << " MiB/s, Seek time: " << testType.seekTime*1000 << "ms.";
-		for (auto codec : getCodecs()) {
+		for (auto codec : codecs) {
 
 			typedef std::pair<std::vector<uint8_t>, cv::Mat> Msg;
 
 			std::vector<std::shared_ptr<Msg>> compressedMessages;
-			for (auto &img : images)
+			size_t compressedSize = 0, originalSize = 0; 
+			for (auto &img : images) {
+				originalSize += img.rows*img.cols*img.channels(); 
 				compressedMessages.push_back( std::make_shared<Msg>( codec->encode(img), img));
+				compressedSize += compressedMessages.back()->first.size();
+			}
 				
 			std::mutex mtx;
 			typedef std::lock_guard<std::mutex> Lock;
@@ -1249,7 +1255,8 @@ int main(int argc, char **argv) {
 			producer.join();
 			for (auto &&t : consumers) t.join();
 			
-			uSnippets::Log(1) << codec->name() << ": " << imagesDone << " Images/second";
+			
+			uSnippets::Log(1) << codec->name() << ": " << imagesDone << " Images/second" << " " << (double(originalSize)/compressedSize) << " Compression Ratio";
 			
 		}
 		}
