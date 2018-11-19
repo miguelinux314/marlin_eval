@@ -6,7 +6,7 @@ class Huff0Pimpl : public CODEC8AA {
 	std::string name() const { return "Huff0"; };
 
 	void   compress(const AlignedArray8 &in, AlignedArray8 &out) const {
-		
+
 		size_t ret =  HUF_compress(out.begin(), out.capacity(), in.begin(), in.size());
 		if (ret==0) {
 			out=in;

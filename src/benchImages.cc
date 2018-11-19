@@ -647,8 +647,12 @@ namespace compressors {
 	struct EntropyCodec : public ICodec {
 
 		std::shared_ptr<CODEC8> codec;
+		bool singleThreaded = false;
 		
-		EntropyCodec(std::shared_ptr<CODEC8> codec) : codec(codec) {}
+		std::mutex mtx;
+		typedef std::lock_guard<std::mutex> Lock;
+		
+		EntropyCodec(std::shared_ptr<CODEC8> codec, bool singleThreaded=false) : codec(codec), singleThreaded(singleThreaded)  {}
 		
 		virtual std::vector<uint8_t> encode(const cv::Mat &img) { 
 			
@@ -658,7 +662,13 @@ namespace compressors {
 
 			UncompressedData8 in(stripped.data, stripped.rows*stripped.cols);
 			CompressedData8 compressed;
-			codec->compress(in, compressed);
+			
+			if (singleThreaded) {
+				Lock l(mtx);
+				codec->compress(in, compressed);
+			} else {
+				codec->compress(in, compressed);
+			}
 			
 			return std::vector<uint8_t>(compressed);
 		}
@@ -668,8 +678,14 @@ namespace compressors {
 			
 			CompressedData8 compressed(buf);
 			UncompressedData8 out;
+
+			if (singleThreaded) {
+				Lock l(mtx);
+				codec->uncompress(compressed, out);
+			} else {
+				codec->uncompress(compressed, out);
+			}
 			
-			codec->uncompress(compressed, out);
 			return cv::Mat();
 		}
 		
@@ -867,9 +883,9 @@ static std::vector<std::shared_ptr<compressors::ICodec>> getCodecs() {
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<Rice>()),
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<RLE>()),
 //		std::make_shared<compressors::EntropyCodec>(std::make_shared<Snappy>()),
-		std::make_shared<compressors::EntropyCodec>(std::make_shared<Nibble>()),
-		std::make_shared<compressors::EntropyCodec>(std::make_shared<FiniteStateEntropy>()),
-		std::make_shared<compressors::EntropyCodec>(std::make_shared<Gipfeli>()),
+//		std::make_shared<compressors::EntropyCodec>(std::make_shared<Nibble>()),
+		std::make_shared<compressors::EntropyCodec>(std::make_shared<FiniteStateEntropy>(), false),
+//		std::make_shared<compressors::EntropyCodec>(std::make_shared<Gipfeli>()),
 //			std::make_shared<compressors::EntropyCodec>(std::make_shared<Gzip>()),
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<Lzo>()),
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<Huff0>()),
@@ -898,7 +914,7 @@ int main(int argc, char **argv) {
 	
 	uSnippets::Assert(argc>1) << "must specify test";
 	
-	std::vector<cv::Mat> images = loadImages(argc, argv, 16);
+	std::vector<cv::Mat> images = loadImages(argc, argv, 64);
 				
 	if (std::string(argv[1])=="analyzePredictors") {
 		
@@ -1152,16 +1168,14 @@ int main(int argc, char **argv) {
 	
 	} else if (std::string(argv[1])=="testNetworkAndDisk") {
 		
-		
-		
 		struct TestType { std::string name; double bandwidth, seekTime; };
 
-		for (auto &&nCores : std::vector<int>{ 4 }) {
+		for (auto &&nCores : std::vector<int>{ 8,1 }) {
 		for (auto &&testType : std::vector<TestType>{ 
-			{"Rotational",200*double(1<<20),0.01}, 
+//			{"Rotational",200*double(1<<20),0.01}, 
 			{"SSD SATA-600",600*double(1<<20),0.0001}, 
-			{"Net 1GB",100*double(1<<20),0.00000}, 
-			{"Net 10GB",1000*double(1<<20),0.00000}, 
+//			{"Net 1GB",100*double(1<<20),0.00000}, 
+//			{"Net 10GB",1000*double(1<<20),0.00000}, 
 			}) {
 				
 			uSnippets::Log(2) << "Tes: " << testType.name << ". Bandwidth: " << (testType.bandwidth/(1<<20)) << " MiB/s, Seek time: " << testType.seekTime*1000 << "ms.";
@@ -1220,7 +1234,7 @@ int main(int argc, char **argv) {
 						}
 					}
 					if (not msgptr) {
-						std::this_thread::sleep_for(std::chrono::milliseconds(1));
+						std::this_thread::sleep_for(std::chrono::nanoseconds(100));
 						continue;
 					}
 					
