@@ -1191,6 +1191,10 @@ int main(int argc, char **argv) {
 				originalSize += img.rows*img.cols*img.channels(); 
 				compressedMessages.push_back( std::make_shared<Msg>( codec->encode(img), img));
 				compressedSize += compressedMessages.back()->first.size();
+				
+				//cv::imshow("image", img);
+				//cv::waitKey(0);
+				//uSnippets::Log(0) << (double(originalSize)/compressedSize);
 			}
 				
 			std::mutex mtx;
