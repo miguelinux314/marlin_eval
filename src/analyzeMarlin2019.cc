@@ -43,12 +43,13 @@ int main() {
 \pgfplotsset{cycle list/Set2}
 \begin{document}
 )ML";
-	
+
+	bool run_analysis = true;
+
 	// Unless stated differently: key=12, overlap=4
 
-
 	// Same Dictionary Size, efficiency over H.
-	if (false) {
+	if (run_analysis) {
 	
 		auto conf = baseConf;
 		tex << "\\input{results/ssse1.tex}\n";
@@ -111,12 +112,12 @@ int main() {
 
 
 	// All possible shift plotted
-	if (false) {
+	if (run_analysis) {
 	
 		auto conf = baseConf;
 		//tex << "\\input{results/ssse1.tex}\n";
-		//ofstream res("results/ssse1.tex");
-		auto &res = tex;
+		ofstream res("results/ssse1.tex");
+//		auto &res = tex;
 
 		for (auto &&distribution : distributions) {
 			auto Dist = distribution.second;
@@ -173,12 +174,12 @@ int main() {
 
 
 	// Rice-Marlin vs Rice DONE!
-	if (false) {
+	if (run_analysis) {
 	
 		
 		//tex << "\\input{results/ssse1.tex}\n";
-		//ofstream res("results/ssse1.tex");
-		auto &res = tex;
+		ofstream res("results/ssse2.tex");
+//		auto &res = tex;
 
 		for (auto &&distribution : distributions) {
 			auto Dist = distribution.second;
@@ -314,7 +315,7 @@ int main() {
 
 
 	// Rice-Marlin vs Marlin
-	if (true) {
+	if (run_analysis) {
 	
 		
 		auto &res = tex;
@@ -410,7 +411,7 @@ int main() {
 
 
 	// Dictionary efficiency vs size and shift
-	if (false) {
+	if (run_analysis) {
 		
 		auto conf = baseConf;
 
@@ -494,7 +495,7 @@ int main() {
 
 
 	// Dictionary efficiency vs size and shift (horizontal limits)
-	if (false) {
+	if (run_analysis) {
 		
 		auto Dists = distributions["Laplace"];
 		auto dist = Dists[(Dists.size()-1)/2];

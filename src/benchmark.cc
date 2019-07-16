@@ -29,6 +29,7 @@
 #include <codecs/marlin.hpp>
 #include <codecs/marlin2018.hpp>
 #include <codecs/marlin2019.hpp>
+#include "./util/distribution.hpp"
 
 struct TestTimer {
 	timespec c_start, c_end;
@@ -180,7 +181,8 @@ static inline void testAgainstP( std::shared_ptr<CODEC8> codec, std::ofstream &t
 	}
 }
 
-static inline std::pair<std::string,std::string> testOnAllImages( std::shared_ptr<CODEC8> codec, std::ofstream &) {
+static inline std::pair<std::string,std::string> testOnAllImages(std::shared_ptr<CODEC8> codec,
+        std::ofstream &) {
 
 	//std::cout << "Testing codec: " << codec->name() << " against Images" << std::endl;
 
@@ -244,13 +246,18 @@ static inline std::pair<std::string,std::string> testOnAllImages( std::shared_pt
 
 
 
-static inline std::pair<std::string,std::string> testOnIndividualImages( std::shared_ptr<CODEC8> codec) {
+static inline std::pair<std::string,std::string> testOnIndividualImages(
+        std::shared_ptr<CODEC8> codec, std::ofstream &csv) {
 
 	std::cout << "Testing codec: " << codec->name() << " against Images" << std::endl;
 
 	std::map<std::string, double> compressSpeed, uncompressSpeed, compressionRate;
-	
-	for (auto file : getAllFilenames("rawzor", ".pgm")) {
+
+    std::string dir_path = "../rawzor";
+
+    std::cout << "====" << dir_path << "X" << codec->name() << std::endl;
+	for (auto file : getAllFilenames(dir_path, ".pgm")) {
+	    std::cout << "~~~~" << file << std::endl;
 				
 		cv::Mat1b img = readPGM8(file);
 		img = img(cv::Rect(0,0,img.cols&0xFF80,img.rows&0xFF80));
@@ -260,7 +267,8 @@ static inline std::pair<std::string,std::string> testOnIndividualImages( std::sh
 		UncompressedData8 uncompressed;
 		
 		TestTimer compressTimer, uncompressTimer;
-		size_t nComp = 1, nUncomp = 1;
+		double min_execution_seconds = 0.1;
+		size_t nComp = 32, nUncomp = 32; // Minimum repetition count
 		do {
 			nComp *= 2;
 			codec->compress(in, compressed);
@@ -268,7 +276,7 @@ static inline std::pair<std::string,std::string> testOnIndividualImages( std::sh
 			for (size_t t=0; t<nComp; t++)
 				codec->compress(in, compressed);
 			compressTimer.stop();
-		} while (compressTimer()<.01);
+		} while (compressTimer()<min_execution_seconds);
 
 		do {
 			nUncomp *= 2;
@@ -277,18 +285,42 @@ static inline std::pair<std::string,std::string> testOnIndividualImages( std::sh
 			for (size_t t=0; t<nUncomp; t++)
 				codec->uncompress(compressed, uncompressed);
 			uncompressTimer.stop();
-		} while (uncompressTimer()<.01);
+		} while (uncompressTimer()<min_execution_seconds);
 		
-		if ( cv::countNonZero(img != uncompressed.img(img.rows, img.cols)) != 0)
-			std::cerr << "Image uncompressed incorrectly" <<  std::endl;
+		if ( cv::countNonZero(img != uncompressed.img(img.rows, img.cols)) != 0) {
+            std::cerr << "Image uncompressed incorrectly" << std::endl;
+            cv::Mat diff = img - uncompressed.img(img.rows, img.cols);
+
+        }
 
 		compressSpeed[file] = nComp*in.nBytes()/  compressTimer();
 		uncompressSpeed[file] = nUncomp*in.nBytes()/  uncompressTimer();
 		compressionRate[file] = double(compressed.nBytes())/double(in.nBytes());
-		
-//		printf("File: %s (%02.2lf)\n",file.c_str(), double(compressed.nBytes())/double(in.nBytes()));
+
+        double minVal;
+        double maxVal;
+        cv::Point minLoc;
+        cv::Point maxLoc;
+        minMaxLoc(img, &minVal, &maxVal, &minLoc, &maxLoc );
+        csv << codec->name()
+               <<","<< dir_path
+               <<","<< file
+               <<","<< minVal
+               <<","<< maxVal
+               <<","<< img.total()
+               <<","<< compressed.nBytes()
+               <<","<< compressTimer() / nComp
+               <<","<< nComp
+               <<","<< uncompressTimer() / nUncomp
+               <<","<< nUncomp
+               <<","<< std::endl;
 	}
-	
+
+	if (compressionRate.size() * compressSpeed.size() * uncompressSpeed.size() == 0) {
+	    std::cerr << "dir_path " << dir_path << " without images?" << std::endl;
+	    abort();
+	}
+
 	double meanCompressionRate=0, meanCompressSpeed=0, meanUncompressSpeed=0;
 	for (auto &e : compressionRate) meanCompressionRate += e.second/compressionRate.size(); 
 	for (auto &e : compressSpeed) meanCompressSpeed += e.second/compressSpeed.size(); 
@@ -303,7 +335,7 @@ static inline std::pair<std::string,std::string> testOnIndividualImages( std::sh
 	enc << "" << 1./meanCompressionRate << " " << (meanCompressSpeed/(1<<20)) << " " << codec->name() << " {west}" << std::endl;
 
 	dec << "" << 1./meanCompressionRate << " " << (meanUncompressSpeed/(1<<20)) << " " << codec->name() << " {west}" << std::endl;
-	
+
 	return std::pair<std::string,std::string>(enc.str(), dec.str());	
 }
 using namespace std;
@@ -339,49 +371,112 @@ int main( int , char *[] ) {
 
 */
 
-	std::map<std::string, double> conf;
-	conf["O"] = 2;
-	conf.emplace("minMarlinSymbols",2);
-//	conf.emplace("autoMaxWordSize",8);
-	conf.emplace("purgeProbabilityThreshold",0.5/4096/256);
-	std::vector<shared_ptr<CODEC8>> C = { 
-		std::make_shared<Marlin2019>(Distribution::Laplace, conf),
+	std::vector<shared_ptr<CODEC8>> C = {
+//        std::make_shared<Rice>(),
+//		std::make_shared<RLE>(),
+//		std::make_shared<Snappy>(),
+//		std::make_shared<Nibble>(),
+//		std::make_shared<FiniteStateEntropy>(),
+//		std::make_shared<Gipfeli>(),
+////             std::make_shared<Gzip>(),
+//		std::make_shared<Lzo>(),
+//		std::make_shared<Huff0>(),
+//		std::make_shared<Lz4>(),
+//		std::make_shared<Zstd>(),
+//		std::make_shared<CharLS>(),
 	};
+	Distribution::Type distType = Distribution::Laplace;
+	for (int K=8; K<=10; K++) {
+        for (int O = 0; K+O<=10; O++) {
+            if (O > 1) {
+                continue;
+            }
+            std::map<std::string, double> conf;
+            conf["O"] = O;
+            conf["K"] = K;
+            conf.emplace("minMarlinSymbols", 2);
+            //	conf.emplace("autoMaxWordSize",8);
+            conf.emplace("purgeProbabilityThreshold", 0.5 / 4096 / 256);
 
+            C.push_back(std::make_shared<Marlin2019>(distType, conf));
+            std::cout << "###" << C[C.size()-1]->name() << std::endl;
+        }
+    }
+//	    std::make_shared<Marlin2018>(Distribution::Laplace,12,0,11),
+//		std::make_shared<Marlin2018>(Distribution::Laplace,12,2,11),
+//		std::make_shared<Marlin2018>(Distribution::Laplace,12,4,11),
+//		std::make_shared<Marlin2018>(Distribution::Laplace,16,0,11),
+//		std::make_shared<Marlin2018>(Distribution::Laplace,12,6,11),
+//		std::make_shared<Marlin2018>(Distribution::Laplace,16,2,11),
+//		std::make_shared<Rice>(),
+//		std::make_shared<RLE>(),
+//		std::make_shared<Snappy>(),
+//		std::make_shared<Nibble>(),
+//		std::make_shared<FiniteStateEntropy>(),
+//		std::make_shared<Gipfeli>(),
+		// std::make_shared<Gzip>(),
+//		std::make_shared<Lzo>(),
+//		std::make_shared<Huff0>(),
+//		std::make_shared<Lz4>(),
+//		std::make_shared<Zstd>(),
+//		std::make_shared<CharLS>(),
 
 	
-	for (auto c : C) 
-		testCorrectness(c);
-
-	ofstream tex("out.tex");
-	
-	tex << "\\documentclass{article}" << endl << "\\usepackage[a4paper, landscape, margin=0cm]{geometry}" << endl << "\\usepackage{tikz}" << endl << "\\usepackage{pgfplots}" << endl << "\\begin{document}" << endl;	
-
-	tex << "\\newcommand{\\customChartSize}{height=3cm, width=5cm,}" << endl;
-
-	tex << R"ML(
-		\newcommand {\compfig}[3]{
-		\begin{tikzpicture} \begin{semilogyaxis}[title=#1, title style={yshift=-1mm},\customChartSize, log origin=infty, log ticks with fixed point, scale only axis, ybar=0pt, enlargelimits=false, bar width=5pt, ymin=0.021544, ymax=46.416, xmin=0, xmax=100, ymajorgrids, major grid style={dotted, gray}, axis y line=right, x tick label style={font={\footnotesize},yshift=1mm}, y tick label style={font={\footnotesize},xshift=-1mm}, xtick=data, ylabel={\emph{GiB/s}}, xlabel={\emph{H(\%)}}, ylabel style={font={\footnotesize},yshift=4mm}, xlabel style={font={\footnotesize},yshift=5.25mm, xshift=29mm}, ]
-		#2
-		\end{semilogyaxis} \begin{axis}[  \customChartSize, scale only axis, axis x line=none, axis y line*=left, ymin=0,ymax=100,xmin=0,xmax=100,enlargelimits=false, y tick label style={font={\footnotesize},xshift=1mm}, y label style={font={\footnotesize},yshift=-3mm}, ylabel={\emph{efficiency (\%)}}, ]
-		#3
-		\end{axis} \end{tikzpicture}
-		})ML";
-
-	tex << "\\begin{figure}" << "  ";
-	tex << "\\centering" << "  ";
 	for (auto c : C) {
-//		if (idx++%2) tex << "%" << std::endl;
-		testAgainstP(c, tex);
+		// testCorrectness(c);
+		//
 	}
-	tex << "\\caption{";tex << "}" << std::endl;
-	tex << "\\label{fig:";tex << "}" << std::endl;
-	tex << "\\end{figure}" << std::endl << std::endl;
 
-	
+	bool run_tex = false;
+
+    ofstream tex("out.tex");
+	if (run_tex) {
+
+        tex << "\\documentclass{article}" << endl << "\\usepackage[a4paper, landscape, margin=0cm]{geometry}" << endl
+            << "\\usepackage{tikz}" << endl << "\\usepackage{pgfplots}" << endl << "\\begin{document}" << endl;
+
+        tex << "\\newcommand{\\customChartSize}{height=3cm, width=5cm,}" << endl;
+
+        tex << R"ML(
+            \newcommand {\compfig}[3]{
+            \begin{tikzpicture} \begin{semilogyaxis}[title=#, title style={yshift=-1mm},\customChartSize, log origin=infty, log ticks with fixed point, scale only axis, ybar=0pt, enlargelimits=false, bar width=5pt, ymin=0.021544, ymax=46.416, xmin=0, xmax=100, ymajorgrids, major grid style={dotted, gray}, axis y line=right, x tick label style={font={\footnotesize},yshift=1mm}, y tick label style={font={\footnotesize},xshift=-1mm}, xtick=data, ylabel={\emph{GiB/s}}, xlabel={\emph{H(\%)}}, ylabel style={font={\footnotesize},yshift=4mm}, xlabel style={font={\footnotesize},yshift=5.25mm, xshift=29mm}, ]
+            #2
+            \end{semilogyaxis} \begin{axis}[  \customChartSize, scale only axis, axis x line=none, axis y line*=left, ymin=0,ymax=100,xmin=0,xmax=100,enlargelimits=false, y tick label style={font={\footnotesize},xshift=1mm}, y label style={font={\footnotesize},yshift=-3mm}, ylabel={\emph{efficiency (\%)}}, ]
+            #3
+            \end{axis} \end{tikzpicture}
+            })ML";
+
+        tex << "\\begin{figure}" << "  ";
+        tex << "\\centering" << "  ";
+        for (auto c : C) {
+            //		if (idx++%2) tex << "%" << std::endl;
+            testAgainstP(c, tex);
+        }
+        tex << "\\caption{";
+        tex << "}" << std::endl;
+        tex << "\\label{fig:";
+        tex << "}" << std::endl;
+        tex << "\\end{figure}" << std::endl << std::endl;
+    }
+
+	ofstream csv("benchmark_results.csv");
+	csv << "codec_name"
+	    <<","<< "directory"
+	    <<","<< "file"
+        <<","<< "pixel_min"
+        <<","<< "pixel_max"
+	    <<","<< "pixel_count"
+	    <<","<< "compression_bytes"
+	    <<","<< "compression_avg_time_s"
+	    <<","<< "compression_count"
+	    <<","<< "decompression_avg_time_s"
+	    <<","<< "decompression_count"
+        <<","<< std::endl;
+
 	std::vector<std::string> encodeImages, decodeImages;
 	for (auto c : C) {
-		auto res = testOnIndividualImages(c);
+	    std::cout << c->name() << "::" << std::endl;
+		auto res = testOnIndividualImages(c, csv);
 		encodeImages.push_back(res.first);
 		decodeImages.push_back(res.second);
 		std::cout << res.first << res.second;
@@ -394,6 +489,8 @@ int main( int , char *[] ) {
 	
 
 	tex << "\\end{document}" << endl;
+	tex.close();
+	csv.close();
 
 	return 0;
 }

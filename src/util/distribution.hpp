@@ -62,7 +62,7 @@ class Distribution {
 
 public:
 
-	enum Type { Gaussian, Laplace, Exponential, Poisson };
+	enum Type { Gaussian=0, Laplace=1, Exponential=2, Poisson=3 };
 
 	static inline std::vector<double> pdfByType(size_t N, Type type, double var) {
 
@@ -71,6 +71,22 @@ public:
 		if (type == Exponential) return PDFExponential(N,var);
 		if (type == Poisson    ) return PDFPoisson(N,var);
 		throw std::runtime_error("Unsupported distribution");		
+	}
+
+	static inline std::string typeToName(Type distType) {
+	    if (distType == Gaussian) {
+	        return "Gaussian";
+	    }
+        if (distType == Laplace) {
+            return "Laplacian";
+        }
+        if (distType == Exponential) {
+            return "Exponential";
+        }
+        if (distType == Poisson) {
+            return "Possion";
+        }
+        return "UNKNOWN";
 	}
 
 	

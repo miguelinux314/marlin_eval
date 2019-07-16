@@ -358,7 +358,7 @@ struct MarlinPimpl : public CODEC8Z {
 
 	class Decoder {
 
-		AlignedArray<uint8_t> data = AlignedArray<uint8_t>(8<<20);
+		AlignedArray<uint8_t,8<<20> data;
 		uint maxWordSize;
 		uint dictSize2;
 
@@ -475,11 +475,11 @@ struct MarlinPimpl : public CODEC8Z {
 	std::string coderName;
 	std::string name() const { return coderName; }
 	
-	MarlinPimpl(Distribution::Type distType, Marlin::Type dictType, size_t dictSize2, size_t numDict) {
+	MarlinPimpl(Distribution::Type distType, MarlinBase::Type dictType, size_t dictSize2, size_t numDict) {
 
 		{
 			std::ostringstream oss;
-			oss << "Marlin " << (distType==Distribution::Laplace?"Lap:":"Exp:") <<  (dictType == Marlin::TUNSTALL?"T":"M") << ":" << dictSize2 << ":" << numDict;
+			oss << "Marlin " << (distType==Distribution::Laplace?"Lap:":"Exp:") <<  (dictType == MarlinBase::TUNSTALL?"T":"M") << ":" << dictSize2 << ":" << numDict;
 			coderName = oss.str();
 		}
 
@@ -511,8 +511,8 @@ struct MarlinPimpl : public CODEC8Z {
 			for (int maxWordLength=4; maxWordLength <= 128; maxWordLength*=2) {
 
 				std::shared_ptr<Dictionary> dict;
-				if (dictType == Marlin::TUNSTALL) dict.reset(new TunstallDictionary(P, dictSize2, maxWordLength));
-				if (dictType == Marlin::MARLIN) dict.reset(new MarlinDictionary(P, dictSize2, maxWordLength));
+				if (dictType == MarlinBase::TUNSTALL) dict.reset(new TunstallDictionary(P, dictSize2, maxWordLength));
+				if (dictType == MarlinBase::MARLIN) dict.reset(new MarlinDictionary(P, dictSize2, maxWordLength));
 
 				dict->tune();
 				double averageBitsPerSymbol = dict->averageBitsPerSymbol();
@@ -597,6 +597,6 @@ struct MarlinPimpl : public CODEC8Z {
 };
 
 
-Marlin::Marlin(Distribution::Type distType, Type dictType, size_t dictSize2, size_t numDict) 
+MarlinBase::MarlinBase(Distribution::Type distType, Type dictType, size_t dictSize2, size_t numDict)
 	: CODEC8withPimpl( new MarlinPimpl(distType, dictType, dictSize2, numDict) ) {}
 
