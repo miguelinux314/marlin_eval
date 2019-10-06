@@ -1480,6 +1480,7 @@ def compare_basic_trees():
     sys.stdout.close()
     sys.stdout = original_stdout
 
+
 # --- Simulation running
 
 def codec_dict_source_to_path(codec_params_dict, source):
@@ -1817,89 +1818,11 @@ def plot_efficiency_results(
                     x_label=pretty_label_dict.get(x_column_name, x_column_name),
                     y_label=pretty_label_dict.get(y_column_name, y_column_name))
 
-        # pprint(data_by_cls_sourcelen_label_pvdict)
-
-        # Plot everything individually
-        # for (cls_name, source_len, label, pvdict), data in data_by_cls_sourcelen_label_pvdict.items():
-        #     print(f"Plotting {data.label}...")
-        #     plt.figure()
-        #     data.render()
-        #     plt.ylim(0.75, 1)
-        #     plt.xlim(0, df[x_column_name].max())
-        #
-        #     plt.savefig(os.path.join(efficiency_plot_dir, f"{data.label}_{source_len}symbols.pdf"),
-        #                 bbox_inches="tight")
-        #     plt.close()
-
-        # # Global plots per class
-        # for target_cls_name in df["cls"].unique():
-        #     output_name = f"{target_cls_name}_{source_len}symbols.pdf"
-        #
-        #     selected_data = []
-        #     for k, data in data_by_cls_sourcelen_label_pvdict.items():
-        #         cls_name, source_len, label, pvdict = k
-        #         if cls_name == target_cls_name:
-        #             selected_data.append(data)
-        #
-        #     if len(selected_data) > 25:
-        #         assert target_cls_name == MarlinForestMarkov.__name__
-        #         continue
-        #
-        #     plt.figure()
-        #     for data in selected_data:
-        #         data.render()
-        #     plt.xlim(0, math.log2(source_len))
-        #     plt.ylim(min_shown_efficiency, 1)
-        #     plt.title(f"{pretty_label_dict.get(target_cls_name, target_cls_name)} "
-        #               f"({source_len} symbols)")
-        #     plt.savefig(os.path.join(efficiency_plot_dir, output_name),
-        #                 bbox_inches="tight")
-        #     plt.close()
-
-        # # Marlin analysis
-        # name_K_O_S_theta_list = [
-        #     ("Base", None, 0, 0, 0),
-        #     ("Best", df["K"].max(), 2, 0, 1e-6),
-        # ]
-        # for K in range(symbol_count_exponent + 1, 9):
-        #     name_K_O_S_theta_list.append((f"Overlap K={K}", K, None, 0, 0))
-        #     for O in [0, 1, 2, 3, 4]:
-        #         name_K_O_S_theta_list.append((f"Shift K={K} O={O}", K, O, None, 0))
-        #         for S in [0, 1]:
-        #             name_K_O_S_theta_list.append((f"$\Theta$ K={K} O={O} S={S}", K, O, S, None))
-        #
-        # for plot_name, K, O, S, symbol_p_threshold in name_K_O_S_theta_list:
-        #     print(f"Ploting MarlinForest's {plot_name}")
-        #     plt.figure()
-        #     for data in filter_marlinforest_selection(
-        #             data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
-        #             K=K, O=O, S=S, symbol_p_threshold=symbol_p_threshold):
-        #         data.render()
-        #     if "Shift" in plot_name:
-        #         plt.xlim(0.5 * math.log2(source_len), math.log2(source_len))
-        #         plt.ylim(0.8, 1)
-        #     else:
-        #         plt.xlim(0, math.log2(source_len))
-        #         plt.ylim(min_shown_efficiency, 1)
-        #     plt.title(f"MarlinForest {plot_name} ({source_len} symbols)")
-        #     plt.savefig(os.path.join(efficiency_plot_dir,
-        #                              f"MarlinForest_{plot_name}_{source_len}symbols.pdf"),
-        #                 bbox_inches="tight")
-        #     yamamoto_data = filter_yamamotoforest_selection(
-        #         data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
-        #         size=df[df["cls"] == YamamotoForest.__name__]["size"].max())
-        #     yamamoto_data.render()
-        #     plt.savefig(os.path.join(efficiency_plot_dir,
-        #                              f"{YamamotoForest.__name__}_and_{MarlinForestMarkov.__name__}_"
-        #                              f"{plot_name}_{source_len}symbols.pdf"),
-        #                 bbox_inches="tight")
-        #     plt.close()
-
         # Paper comparisons
         if generate_fig1:
+            plt.rcParams.update({'font.size': 12})
             ## Base - Markov - Yamamoto
             max_K = 8
-            # size = 2**max_K if 2**max_K < size else size
             size = 2 ** max_K
             marlin_basetree_data = find_by_cls_params(
                 cls=MarlinBaseTree, data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
@@ -1908,14 +1831,20 @@ def plot_efficiency_results(
             marlin_markovtree_data = filter_marlinforest_selection(
                 data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
                 K=max_K, O=0, S=0, symbol_p_threshold=0)
+
             assert len(marlin_markovtree_data) >= 1
             marlin_markovtree_data = marlin_markovtree_data[0]
+            marlin_markovtree_data.extra_kwargs.update(color="red")
             marlin_markovtree_data.label = f"Stochastically optimized Tree (Algorithm 4) :: $| \mathcal{{T}}\ | = {size:.0f}$"
             yamamoto_tree_data = find_by_cls_params(
                 cls=YamamotoTree, data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
                 params={"size": size})
-            yamamoto_tree_data.label = f"Yamamoto and Yokoo's code Tree :: $|\mathcal{{T}}\ | = {size:.0f}$"
-            yamamoto_tree_data.extra_kwargs["linestyle"] = "--"
+            yamamoto_tree_data.label = f"Yamamoto and Yokoo's Tree :: $|\mathcal{{T}}\ | = {size:.0f}$"
+            yamamoto_tree_data.extra_kwargs.update(linestyle="--", color="magenta")
+
+            marlin_basetree_data.extra_kwargs.update(dict(linestyle="--"))
+            marlin_markovtree_data.extra_kwargs.update(dict(linestyle="--"))
+
 
             plt.figure()
             marlin_basetree_data.render()
@@ -1937,11 +1866,13 @@ def plot_efficiency_results(
             print(f"Markov tree - YYtree: {marlin_basetree_data.y_label} :: avg diff = {markovtree_avg_diff}")
             plt.xlim(0, symbol_count_exponent)
             # plt.ylim(min_shown_efficiency, 1)
+            plt.legend()
             plt.savefig(os.path.join(efficiency_plot_dir, f"diff_markov_improvements_{source_len}symbols.pdf"),
                         bbox_inches="tight")
             plt.close()
 
         if generate_fig2:
+            plt.rcParams.update({'font.size': 12})
             max_K = 8
             size = 2 ** max_K
             O_values = range(symbol_count_exponent)
@@ -1951,9 +1882,9 @@ def plot_efficiency_results(
                 cls=YamamotoForest,
                 data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
                 params={"size": size})
-            yamamoto_forest_data.label = f"Yamamoto and Yokoo's code Forest :: $|\mathcal{{F}}\ | = {2 ** symbol_count_exponent - 1}$ :: $|\mathcal{{T}}\ | = {size:.0f}$"
+            yamamoto_forest_data.label = f"Yamamoto and Yokoo's Forest :: $|\mathcal{{F}}\ | = {2 ** symbol_count_exponent - 1}$ :: $|\mathcal{{T}}\ | = {size:.0f}$"
             yamamoto_forest_data.alpha = 0.5
-            yamamoto_forest_data.extra_kwargs["linestyle"] = "--"
+            yamamoto_forest_data.extra_kwargs.update(dict(linestyle="-", color="magenta"))
 
             for O in O_values:
                 data = find_by_cls_params(
@@ -1961,10 +1892,14 @@ def plot_efficiency_results(
                     data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
                     params={"K": max_K, "O": O})
                 data.label = \
-                    f"Stochastically optimized Forest (Algorithm 6) :: " \
+                    f"Algorithm 6 Forest :: " \
                     f"$| \mathcal{{F}}\ | = 2^O = {2 ** O}$ :: $| \mathcal{{T}}\ | = 2^K = {2 ** max_K}$"
                 data.alpha = 0.5
-                data.extra_kwargs = {"linestyle": ":"} if O is O_values[0] else {}
+                if O is O_values[0]:
+                    data.extra_kwargs = {"linestyle": "--", "color":"red"}
+                elif O is O_values[2]:
+                    data.extra_kwargs = {"linestyle": "-", "color": "green"}
+
                 data.render()
                 print(f"{data.y_label}: K={max_K} O={O} {np.mean(data.diff(yamamoto_forest_data).y_values)}")
 
@@ -1978,6 +1913,7 @@ def plot_efficiency_results(
 
         ## Fig 3 Shift
         if generate_fig3:
+            plt.rcParams.update({'font.size': 12})
             K = 8
             O = 2
             size = 2 ** 8
@@ -1988,13 +1924,21 @@ def plot_efficiency_results(
                         cls=MarlinForestMarkov,
                         params={"K": K, "O": O, "S": S, "symbol_p_threshold": symbol_p_threshold})
                     data.label = \
-                        f"Stochastically optimized Forest (Algorithm 6) :: " \
+                        f"Algorithm 6 Forest :: " \
                         f"$| \mathcal{{F}}\ | = 2^O = {2 ** O}$ " \
                         f":: $| \mathcal{{T}}\ | = 2^K = {2 ** K}$ " \
                         f":: S = {S} " \
                         ""
                     # f":: $\Theta = {symbol_p_threshold}$" \
                     data.extra_kwargs["linestyle"] = ":" if symbol_p_threshold != 0 else "-"
+                    if S == 0:
+                        data.extra_kwargs["color"] = "green"
+                    elif S == 1:
+                        data.extra_kwargs["color"] = "green"
+                        data.extra_kwargs["linestyle"] = "-."
+                    elif S == 3:
+                        data.extra_kwargs["color"] = "green"
+                        data.extra_kwargs["linestyle"] = ":"
                     data.alpha = 0.5
                     data.render()
 
@@ -2002,9 +1946,9 @@ def plot_efficiency_results(
                 cls=YamamotoForest,
                 data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
                 params={"size": size})
-            yamamoto_forest_data.label = f"Yamamoto and Yokoo's code Forest :: $|\mathcal{{F}}\ | = {2 ** symbol_count_exponent - 1}$ :: $|\mathcal{{T}}\ | = {size:.0f}$"
+            yamamoto_forest_data.label = f"Yamamoto and Yokoo's Forest :: $|\mathcal{{F}}\ | = {2 ** symbol_count_exponent - 1}$ :: $|\mathcal{{T}}\ | = {size:.0f}$"
             yamamoto_forest_data.alpha = 0.5
-            yamamoto_forest_data.extra_kwargs["linestyle"] = "--"
+            yamamoto_forest_data.extra_kwargs.update(linestyle="-", color="magenta")
             yamamoto_forest_data.render()
             plt.xlim(0, symbol_count_exponent)
             plt.ylim(min_shown_efficiency, 1)
@@ -2012,10 +1956,6 @@ def plot_efficiency_results(
                 os.path.join(efficiency_plot_dir,
                              f"shift_improvements_{source_len}symbols.pdf"), bbox_inches="tight")
             plt.close()
-
-        # yamamoyo_forest_data = find_by_cls_params(
-        #     cls=YamamotoForest, data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
-        #     params={"size": size})
 
 
 def filter_marlinforest_selection(data_by_cls_sourcelen_label_pvdict, K, O, S, symbol_p_threshold):
@@ -2083,6 +2023,6 @@ if __name__ == '__main__':
     if df is None:
         print("No data to render. Aborting")
         sys.exit(1)
-    df = curate_data(df)
 
+    df = curate_data(df)
     plot_efficiency_results(df)

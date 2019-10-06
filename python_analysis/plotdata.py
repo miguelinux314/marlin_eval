@@ -9,7 +9,7 @@ import collections
 from matplotlib import pyplot as plt
 
 class PlottableData:
-    alpha = 0.75
+    alpha = 0.5
 
     def __init__(self, data=None, axis_labels=None, label=None, extra_kwargs=None):
         self.data = data
