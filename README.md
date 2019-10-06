@@ -1,6 +1,6 @@
 > # High-throughput variable-to-fixed entropy codec using selective, stochastic forest codes
 > ## Manuel Martínez Torres, Miguel Hernández-Cabronero, Ian Blanes, Joan Serra-Sagristà
-> ### Manuel Martı́nez Torres is with Karlsruhe Institute of Technology, Karl-sruhe 76131, Germany (e-mail: manuel.martinez@kit.edu). M. Hernández-Cabronero (e-mail: miguel.hernandez@uab.cat), I. Blanes (e-mail: ian.blanes@uab.cat) and J. Serra-Sagristà (e-mail: joan.serra@uab.cat) are with the Universitat Autònoma de Barcelona, Bellaterra 08193, Spain.
+> ### Manuel Martı́nez Torres is with Karlsruhe Institute of Technology, Karlsruhe 76131, Germany (e-mail: manuel.martinez@kit.edu). M. Hernández-Cabronero (e-mail: miguel.hernandez@uab.cat), I. Blanes (e-mail: ian.blanes@uab.cat) and J. Serra-Sagristà (e-mail: joan.serra@uab.cat) are with the Universitat Autònoma de Barcelona, Bellaterra 08193, Spain.
 
 # Introduction
 This repository contains the benchmark implementation used to gather data for the homonymous scientific paper,
@@ -13,11 +13,14 @@ kept unaltered in the repository. A list of authors of all included code and dat
 
 # Instructions
 
+Tested on Ubuntu 18.04 LTS.
+
 1. Install the following libraries  
-> $ sudo apt install build-essential libopencv-dev liblzo2-dev libzstd-dev libsnappy-dev liblz4-dev
+> $ sudo apt install build-essential cmake libopencv-dev liblzo2-dev libzstd-dev libsnappy-dev liblz4-dev
+>   python3 python3-numpy python3-scipy python3-pandas python3-matplotlib
 
 2. Run all tests
-> $ ./main.sh
+> $ cd code; ./main.sh
 
 # Dataset information
 ## External authors 
