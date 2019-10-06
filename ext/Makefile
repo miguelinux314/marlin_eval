@@ -1,3 +1,6 @@
+# Makefile used to gather external codec implementations
+# Updated August 2019
+
 .PHONY: all
 
 all: gipfeli.a FiniteStateEntropy.a marlin.a
@@ -39,6 +42,3 @@ marlin.a:
 	@mkdir -p marlin/build
 	@cd marlin/build && cmake -DCMAKE_BUILD_TYPE=Release .. && make clean && make -j 4
 	@cp marlin/build/libmarlin.a marlin.a
-
-clean:
-	rm -rf gipfeli FiniteStateEntropy gipfeli.a FiniteStateEntropy.a marlin.a

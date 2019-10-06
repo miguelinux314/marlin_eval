@@ -17,8 +17,6 @@
 
 #include <codecs/rle.hpp>
 #include <codecs/snappy.hpp>
-#include <codecs/nibble.hpp>
-#include <codecs/charls.hpp>
 #include <codecs/gipfeli.hpp>
 #include <codecs/gzip.hpp>
 #include <codecs/lzo.hpp>
@@ -40,7 +38,6 @@
 #include <uSnippets/turbojpeg.hpp>
 #pragma GCC diagnostic pop
 
-#include <CharLS/interface.h>
 #include <webp/encode.h>
 #include <webp/decode.h>
 
@@ -715,38 +712,6 @@ namespace compressors {
 	};
 
 
-	struct CharLS : public ICodec {
-		
-		virtual std::vector<uint8_t> encode(const cv::Mat &img_) { 
-
-			cv::Mat1b img = predictors::Color2Planar(img_.clone(), 2);
-
-			JlsParameters info = JlsParameters();
-			info.components = img.channels();
-			info.bitspersample = 8;
-			info.bytesperline = img.cols*img.channels();
-			info.width = img.cols;
-			info.height = img.rows;
-
-
-			std::vector<uint8_t> ret(img.rows*img.cols*img.channels()*2);
-			size_t compressedLength;
-			JpegLsEncode(&ret[0], ret.capacity(), &compressedLength, img.data, img.rows*img.cols*img.channels(), &info);
-
-			ret.resize(compressedLength);
-			return ret;
-		}
-		
-		virtual cv::Mat decode(const std::vector<uint8_t> &buf, const cv::Mat &in) {
-			
-			cv::Mat out = in.clone();
-			JpegLsDecode(out.data, out.rows*out.cols*out.channels(), &buf[0], buf.size(), nullptr);
-			return out;
-			//return in;
-		}
-		
-		virtual std::string name() { return "CharLS"; }
-	};
 
 	struct Memcpy : public ICodec {
 		
@@ -883,7 +848,6 @@ static std::vector<std::shared_ptr<compressors::ICodec>> getCodecs() {
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<Rice>()),
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<RLE>()),
 //		std::make_shared<compressors::EntropyCodec>(std::make_shared<Snappy>()),
-		std::make_shared<compressors::EntropyCodec>(std::make_shared<Nibble>()),
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<FiniteStateEntropy>(), false),
 //		std::make_shared<compressors::EntropyCodec>(std::make_shared<Gipfeli>()),
 //			std::make_shared<compressors::EntropyCodec>(std::make_shared<Gzip>()),
@@ -891,7 +855,6 @@ static std::vector<std::shared_ptr<compressors::ICodec>> getCodecs() {
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<Huff0>()),
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<Zstd>()),
 		std::make_shared<compressors::EntropyCodec>(std::make_shared<Marlin2019>(Distribution::Laplace,baseConf)),
-//		std::make_shared<compressors::EntropyCodec>(std::make_shared<CharLS>()),
 		
 //		std::make_shared<compressors::OpenCVCodec>(".jp2",std::vector<int>{}),
 //		std::make_shared<compressors::OpenCVCodec>(".png",std::vector<int>{CV_IMWRITE_PNG_COMPRESSION,1,CV_IMWRITE_PNG_STRATEGY, CV_IMWRITE_PNG_STRATEGY_HUFFMAN_ONLY}),
@@ -900,7 +863,6 @@ static std::vector<std::shared_ptr<compressors::ICodec>> getCodecs() {
 //		std::make_shared<compressors::OpenCVCodec>(".png",std::vector<int>{CV_IMWRITE_PNG_COMPRESSION,9,CV_IMWRITE_PNG_STRATEGY, CV_IMWRITE_PNG_STRATEGY_FILTERED}),
 //		std::make_shared<compressors::OpenCVCodec>(".jpg",std::vector<int>{CV_IMWRITE_JPEG_QUALITY,100}),
 		std::make_shared<compressors::TurboJPEG>(),
-		std::make_shared<compressors::CharLS>(),
 //		std::make_shared<compressors::WebP>(),
 		std::make_shared<compressors::Memcpy>(),
 		

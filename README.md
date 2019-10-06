@@ -1,48 +1,68 @@
-# marlin
-Marlin: high throughput entropy compressor
+> # High-throughput variable-to-fixed entropy codec using selective, stochastic forest codes
+> ## Manuel Martínez Torres, Miguel Hernández-Cabronero, Ian Blanes, Joan Serra-Sagristà
+> ### Manuel Martı́nez Torres is with Karlsruhe Institute of Technology, Karl-sruhe 76131, Germany (e-mail: manuel.martinez@kit.edu). M. Hernández-Cabronero (e-mail: miguel.hernandez@uab.cat), I. Blanes (e-mail: ian.blanes@uab.cat) and J. Serra-Sagristà (e-mail: joan.serra@uab.cat) are with the Universitat Autònoma de Barcelona, Bellaterra 08193, Spain.
 
-Please, check the paper for the orginal details of Marlin in:
-<https://cvhci.anthropomatik.kit.edu/~manel/publications/2017_dcc.pdf>
+# Introduction
+This repository contains the benchmark implementation used to gather data for the homonymous scientific paper,
+as well as all tools used to analyze data. It is intended to be self-contained to allow reproducibility,
+therefore a copy of the dataset used for comparison is provided as well.
 
-this current repository to the upgraded Marlin with Partially Overlapping Codes, whose paper has not yet been publicly released.
+Several existing codec implementations, as well as all non-synthetic data samples, are included for reproducibility,
+and no authorship is claimed. Original authors are cited in the published manuscript, and their license notices and code 
+kept unaltered in the repository. A list of authors of all included code and data is provided below. 
 
-Instructions to run it on a Ubuntu 16.04 machine:
+# Instructions
 
-- Install prerequisites:
-sudo apt update
-sudo apt upgrade
-sudo apt install git build-essential wget unzip libopencv-dev liblzo2-dev libzstd-dev libcharls-dev libsnappy-dev liblz4-dev libboost-dev libboost-program-options-dev libboost-serialization-dev libboost-system-dev 
-
-- Clone this branch of the Marlin repository: 
-git clone -b dcc2018 https://github.com/MartinezTorres/marlin.git
-
-- Get into the repository:
-cd marlin
-
-- And build the main files:
-make
-
-This will create two executables:
-bin/benchmark: checks and compares multiple compression algorithms.
-bin/analyzeMarlin: analyzes multiple parameters of Marlin.
-
-Please check the main function of both programs (in src/ folder) and select the tests/parameters you want to visualize.
-
-Both files generate a file named out.tex with the graphs. To visualize the graphs you need to install texlive:
-
-sudo apt install texlive-full evince
-
-And to convert from out.tex to a PDF:
-
-pdflatex out.tex && evince out.pdf
+1. Install the following libraries  
+> $ sudo apt install git build-essential wget unzip 
+>   libopencv-dev liblzo2-dev libzstd-dev libsnappy-dev 
+>   liblz4-dev
 
 
-Notes:
-comparing all the compressors at once requires 64GiB of RAM, we suggest to enable just a few compressors each time (by uncommenting them in src/benchmark.cc) The default set is proven to work with 8GB of RAM.
+# Dataset information
+## External authors 
+Unless honest mistake, the list of external authors whose code or data is included in the repository is as follows:
 
-the current implementation of Marlin is at: src/marlinlib/marlin.hpp
+* Datasets
+    * [ISO 12640-2:2004](https://www.iso.org/standard/33293.html) 
+      Graphic technology — Prepress digital data exchange — Part 2: XYZ/sRGB encoded standard colour image data 
+      (XYZ/SCID))
+      
+    * The [KodakCD](http://r0k.us/graphics/kodak/) set, authored by Kodak, and dutifully kept online by Rich Franzen. 
+      Individual image credits are available at http://r0k.us/graphics/kodak/PhotoCD_credits.txt.    
+      
+    * [RAWZOR](http://imagecompression.info) by http://imagecompression.info, http://rawzor.com 
+    
+    * The Mixed set is composed by:
+        - The [Gas Sensor Array Drift Dataset Data Set](https://archive.ics.uci.edu/ml/datasets/Gas+Sensor+Array+Drift+Dataset).
+        Alexander Vergara and Shankar Vembu and Tuba Ayhan and Margaret A. Ryan and Margie L. Homer and Ramón Huerta, Chemical gas sensor drift compensation using classifier ensembles, Sensors and Actuators B: Chemical (2012) doi: 10.1016/j.snb.2012.01.074.
+        
+        - The [Intel Lab Data](http://db.csail.mit.edu/labdata/labdata.html) by the [Intel Berkeley Research lab](http://www.intel-research.net/berkeley/index.asp).
+        "Data presented on this page was collected through the hard work of: Peter Bodik, Wei Hong, Carlos Guestrin, Sam Madden, Mark Paskin, and Romain Thibaux. Mark aggregated the raw connectivity information over time and generated the beautiful network layout diagram. Sam and Wei wrote TinyDB and other software for logging data. Intel Berkeley provided hardware. The TinyOS team, in particular Joe Polastre and Rob Szewczyk, provided the software infrastructure and hardware designs that made this deployment possible."
+        
+        - The [Drug Review Dataset (Drugs.com) Data Set](https://archive.ics.uci.edu/ml/datasets/Drug+Review+Dataset+%28Drugs.com%29).
+        Felix Gräßer, Surya Kallumadi, Hagen Malberg, and Sebastian Zaunseder. 2018. Aspect-Based Sentiment Analysis of Drug Reviews Applying Cross-Domain and Cross-Data Learning. In Proceedings of the 2018 International Conference on Digital Health (DH '18). ACM, New York, NY, USA, 121-125. DOI: [10.1145/3194658.3194677](https://doi.org/10.1145/3194658.3194677)
+        
+* Codecs
+    * The Marlin codec, high-throughput implementation in C++ by Manuel Martínez Torrez, prototype in Python by Miguel Hernández-Cabronero. 
 
-Please note that, although I tried to make the code as clear as possible, this is still research code, and thus it is not as thoroughly documented as it should be. Furthermore, due to the nature of the algorithm, when balancing legibility, performance, and versatility, we had to optimize first for performance, then for versatility, and finally, for legibility.
-
-For questions about the code, do not hesitate to send a mail to:  manuel (dot) martinez (at) kit (dot) edu. 
-
+    * [SNAPPY](http://google.github.io/snappy) - Tarantov, Zeev and Gunderson, Steinar, 2011
+    
+    * [Gipfelli](https://storage.googleapis.com/pub-tools-public-publication-data/pdf/42050.pdf) - Copyright 2011 Google Inc. All Rights Reserved. - designed by Jyrki Alakuijala,
+      and implemented by Rastislav Lenhardt as an intern project.
+      
+    * GZip from the zlib library, by Phil Katz.
+    
+    * The [LZO library](http://www.oberhumer.com/opensource/lzo/) by Markus F.X.J. Oberhumer
+    
+    * Huff0, "a [Huffman codec](https://en.wikipedia.org/wiki/Huffman_coding) designed for modern CPU,
+    featuring OoO (Out of Order) operations on multiple ALU (Arithmetic Logic Unit),
+    achieving extremely fast compression and decompression speeds."
+      
+    * FSE "is a new kind of [Entropy encoder](http://en.wikipedia.org/wiki/Entropy_encoding),
+    based on [ANS theory, from Jarek Duda](http://arxiv.org/abs/1311.2540),
+    achieving precise compression accuracy (like [Arithmetic coding](http://en.wikipedia.org/wiki/Arithmetic_coding)) at much higher speeds."  
+         
+## Curation  
+Original data in the dataset has been curated by prepending a PGM-like header. This header provides width, height
+and sample depth information so that all samples can be read in an homogeneous way.

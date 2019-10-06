@@ -1,6 +1,14 @@
 #include <codecs/lzo.hpp>
 #include <lzo/lzo1x.h>
 
+/**
+ Wrapper for:
+
+ http://www.oberhumer.com/opensource/lzo/
+ Copyright (C) 1996 - 2017
+ Markus F.X.J. Oberhumer
+*/
+
 class LzoPimpl : public CODEC8AA {
 	
 	int level;
