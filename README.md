@@ -16,6 +16,9 @@ kept unaltered in the repository. A list of authors of all included code and dat
 1. Install the following libraries  
 > $ sudo apt install build-essential libopencv-dev liblzo2-dev libzstd-dev libsnappy-dev liblz4-dev
 
+2. Run all tests
+> $ ./main.sh
+
 # Dataset information
 ## External authors 
 Unless honest mistake, the list of external authors whose code or data is included in the repository is as follows:
@@ -72,3 +75,6 @@ and sample depth information so that all samples can be read in an homogeneous w
 # License
 
 [License](./LICENSE)
+
+------
+_October 2019_
