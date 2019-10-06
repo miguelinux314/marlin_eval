@@ -14,10 +14,7 @@ kept unaltered in the repository. A list of authors of all included code and dat
 # Instructions
 
 1. Install the following libraries  
-> $ sudo apt install git build-essential wget unzip 
->   libopencv-dev liblzo2-dev libzstd-dev libsnappy-dev 
->   liblz4-dev
-
+> $ sudo apt install build-essential libopencv-dev liblzo2-dev libzstd-dev libsnappy-dev liblz4-dev
 
 # Dataset information
 ## External authors 
