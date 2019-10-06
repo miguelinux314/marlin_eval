@@ -51,7 +51,7 @@ public:
 
 			auto testData = Distribution::getResiduals(pdf, 1<<20);
 			std::vector<uint8_t> out(testData.size());
-			ssize_t sz = builtDictionaries[p]->compress(testData, out);
+			//ssize_t sz = builtDictionaries[p]->compress(testData, out);
 			//printf("%lf %lf\n", ((p+0.5)/builtDictionaries.size())/(double(sz)/testData.size()), builtDictionaries[p]->efficiency);
 		}
 

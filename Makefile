@@ -1,6 +1,8 @@
-CFLAGS += -std=gnu++11 -Wall -Wextra -Wcast-qual -Wcast-align -Wstrict-aliasing=1 -Wswitch-enum -Wundef -pedantic  -Wfatal-errors 
+CFLAGS += -std=gnu++11 -Wall -Wextra -Wcast-qual -Wcast-align -Wstrict-aliasing=1 -Wswitch-enum -Wundef -pedantic  -Wfatal-errors
 
 CFLAGS += -I./src
+CFLAGS += -I./fapec/fapec_lib
+CFLAGS += -I./fapec/fapec_api
 
 CFLAGS += `pkg-config opencv --cflags`
 LFLAGS += `pkg-config opencv --libs`
@@ -9,19 +11,25 @@ LFLAGS += -lboost_system -lboost_program_options -lboost_serialization
 LFLAGS += -lz -lrt
 
 LCODECS += -lsnappy -lCharLS -lzstd -llz4 -llzo2 -lpng -lturbojpeg -lwebp
+LCODECS += -L . -l:libFapecCompress.so -l:libFapecDecompress.so
 
 
 CFLAGS += -fopenmp
 LFLAGS += -lgomp
 
-CFLAGS += -Ofast
 
-CFLAGS += -g
-#CFLAGS += -g -O0
-CFLAGS += -g -Ofast -march=native
+#CFLAGS += -Ofast
+
+#CFLAGS += -g
+#CFLAGS += -g
+#CFLAGS += -g -Ofast -march=native
+#CFLAGS += -g -fno-unroll-loops
+CFLAGS += -g -Ofast
 
 CFLAGS += -I./ext
 LFLAGS += $(wildcard ./ext/*.a)
+
+
 
 
 #CFLAGS += -DNDEBUG
@@ -65,7 +73,7 @@ ext:
 
 ./bin/%: ./src/%.cc $(CODECS) ext
 	@echo "CREATING $@" $(CODECS) ext
-	@$(CXX) -o $@ $< $(CODECS) $(LCODECS) $(CFLAGS) $(LFLAGS)
+	@$(CXX) -o $@ $< $(CODECS) $(LCODECS) $(CFLAGS) $(LFLAGS) -l:libFapecCompress.so -l:libFapecDecompress.so
 
 
 prof: ./bin/dcc2017

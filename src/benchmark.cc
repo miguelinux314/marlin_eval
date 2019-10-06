@@ -1,19 +1,15 @@
 #include <dirent.h>
-
-#include <marlinlib/marlin.hpp>
-
 #include <fstream>
 #include <map>
 #include <queue>
 #include <chrono>
 #include <memory>
 #include <iostream>
-
 #include <opencv/cv.h>
 #include <opencv/highgui.h>
 
+#include <marlinlib/marlin.hpp>
 #include <util/distribution.hpp>
-
 #include <codecs/rle.hpp>
 #include <codecs/snappy.hpp>
 #include <codecs/nibble.hpp>
@@ -29,7 +25,7 @@
 #include <codecs/marlin.hpp>
 #include <codecs/marlin2018.hpp>
 #include <codecs/marlin2019.hpp>
-#include "./util/distribution.hpp"
+#include <codecs/fapec.hpp>
 
 struct TestTimer {
 	timespec c_start, c_end;
@@ -181,145 +177,157 @@ static inline void testAgainstP( std::shared_ptr<CODEC8> codec, std::ofstream &t
 	}
 }
 
-static inline std::pair<std::string,std::string> testOnAllImages(std::shared_ptr<CODEC8> codec,
-        std::ofstream &) {
+//static inline std::pair<std::string,std::string> testOnAllImages(std::shared_ptr<CODEC8> codec,
+//        std::ofstream &) {
+//
+//	//std::cout << "Testing codec: " << codec->name() << " against Images" << std::endl;
+//
+//	std::map<std::string, double> compressSpeed, uncompressSpeed, compressionRate;
+//
+//	size_t sizeData=0, sizeCompressed=0;
+//	std::vector<double> encodeSpeeds, decodeSpeeds;
+//
+//	for (size_t tries = 0; tries<10; tries++) {
+//		sizeData=0;
+//		sizeCompressed=0;
+//		double encodeTime=0, decodeTime=0;
+//
+//            for (auto file : getAllFilenames("rawzor", ".pgm")) {
+//                std::cout << file << std::endl<< std::endl<< std::endl<< std::endl;;
+//
+//                cv::Mat1b img = readPGM8(file);
+//                img = img(cv::Rect(0, 0, img.cols & 0xFF80, img.rows & 0xFF80));
+//
+//                UncompressedData8 in(img);
+//                CompressedData8 compressed;
+//                UncompressedData8 uncompressed;
+//
+//                TestTimer encodeTimer, decodeTimer;
+//                codec->compress(in, compressed);
+//                encodeTimer.start();
+//                codec->compress(in, compressed);
+//                encodeTimer.stop();
+//
+//                codec->uncompress(compressed, uncompressed);
+//                decodeTimer.start();
+//                codec->uncompress(compressed, uncompressed);
+//                decodeTimer.stop();
+//
+//                if (cv::countNonZero(img != uncompressed.img(img.rows, img.cols)) != 0)
+//                    std::cerr << "Image uncompressed incorrectly" << std::endl;
+//
+//                sizeData += in.nBytes();
+//                sizeCompressed += compressed.nBytes();
+//                encodeTime += encodeTimer();
+//                decodeTime += decodeTimer();
+//            }
+//            encodeSpeeds.push_back(sizeData / encodeTime);
+//            decodeSpeeds.push_back(sizeData / decodeTime);
+//        }
+//	}
+//
+//	double meanEncodeSpeed = std::accumulate(encodeSpeeds.begin(), encodeSpeeds.end(), 0.0) / encodeSpeeds.size();
+//	double meanDecodeSpeed = std::accumulate(decodeSpeeds.begin(), decodeSpeeds.end(), 0.0) / decodeSpeeds.size();
+//	for (auto &&s : encodeSpeeds) s-=meanEncodeSpeed;
+//	for (auto &&s : decodeSpeeds) s-=meanDecodeSpeed;
+//
+//	double stddevEncodeSpeed = std::sqrt(std::inner_product(encodeSpeeds.begin(), encodeSpeeds.end(), encodeSpeeds.begin(), 0.0) / (encodeSpeeds.size()-1));
+//
+//	double stddevDecodeSpeed = std::sqrt(std::inner_product(decodeSpeeds.begin(), decodeSpeeds.end(), decodeSpeeds.begin(), 0.0) / (decodeSpeeds.size()-1));
+//
+//
+//	std::ostringstream enc, dec;
+//	enc << "(" << double(sizeData)/sizeCompressed << "," << (meanEncodeSpeed/(1<<20)) << ") +- (0," << stddevEncodeSpeed/(1<<20) << ") [" << codec->name() << "]" << std::endl;
+//
+//	dec << "(" << double(sizeData)/sizeCompressed << "," << (meanDecodeSpeed/(1<<20)) << ") +- (0," << stddevDecodeSpeed/(1<<20) << ") [" << codec->name() << "]" << std::endl;
+//
+//	return std::pair<std::string,std::string>(enc.str(), dec.str());
+//}
 
-	//std::cout << "Testing codec: " << codec->name() << " against Images" << std::endl;
-
-	std::map<std::string, double> compressSpeed, uncompressSpeed, compressionRate;
-	
-	size_t sizeData=0, sizeCompressed=0;
-	std::vector<double> encodeSpeeds, decodeSpeeds;
-	
-	for (size_t tries = 0; tries<10; tries++) {
-		sizeData=0;
-		sizeCompressed=0;
-		double encodeTime=0, decodeTime=0;
-		for (auto file : getAllFilenames("rawzor", ".pgm")) {
-			cv::Mat1b img = readPGM8(file);
-			img = img(cv::Rect(0,0,img.cols&0xFF80,img.rows&0xFF80));
-			
-			UncompressedData8 in(img);
-			CompressedData8 compressed;
-			UncompressedData8 uncompressed;
-			
-			TestTimer encodeTimer, decodeTimer;
-			codec->compress(in, compressed);
-			encodeTimer.start();
-				codec->compress(in, compressed);
-			encodeTimer.stop();
-
-			codec->uncompress(compressed, uncompressed);
-			decodeTimer.start();
-				codec->uncompress(compressed, uncompressed);
-			decodeTimer.stop();
-			
-			if ( cv::countNonZero(img != uncompressed.img(img.rows, img.cols)) != 0)
-				std::cerr << "Image uncompressed incorrectly" <<  std::endl;
-
-			sizeData += in.nBytes();
-			sizeCompressed += compressed.nBytes();
-			encodeTime+=encodeTimer();
-			decodeTime+=decodeTimer();
-		}
-		encodeSpeeds.push_back(sizeData/encodeTime);
-		decodeSpeeds.push_back(sizeData/decodeTime);
-	}
-		
-	double meanEncodeSpeed = std::accumulate(encodeSpeeds.begin(), encodeSpeeds.end(), 0.0) / encodeSpeeds.size();
-	double meanDecodeSpeed = std::accumulate(decodeSpeeds.begin(), decodeSpeeds.end(), 0.0) / decodeSpeeds.size();
-	for (auto &&s : encodeSpeeds) s-=meanEncodeSpeed;
-	for (auto &&s : decodeSpeeds) s-=meanDecodeSpeed;
-
-	double stddevEncodeSpeed = std::sqrt(std::inner_product(encodeSpeeds.begin(), encodeSpeeds.end(), encodeSpeeds.begin(), 0.0) / (encodeSpeeds.size()-1));
-
-	double stddevDecodeSpeed = std::sqrt(std::inner_product(decodeSpeeds.begin(), decodeSpeeds.end(), decodeSpeeds.begin(), 0.0) / (decodeSpeeds.size()-1));
-	
-	
-	std::ostringstream enc, dec;
-	enc << "(" << double(sizeData)/sizeCompressed << "," << (meanEncodeSpeed/(1<<20)) << ") +- (0," << stddevEncodeSpeed/(1<<20) << ") [" << codec->name() << "]" << std::endl;
-
-	dec << "(" << double(sizeData)/sizeCompressed << "," << (meanDecodeSpeed/(1<<20)) << ") +- (0," << stddevDecodeSpeed/(1<<20) << ") [" << codec->name() << "]" << std::endl;
-	
-	return std::pair<std::string,std::string>(enc.str(), dec.str());	
-}
 
 
-
-static inline std::pair<std::string,std::string> testOnIndividualImages(
-        std::shared_ptr<CODEC8> codec, std::ofstream &csv) {
+static inline std::pair<std::string,std::string> testOnIndividualFiles(
+        std::shared_ptr<CODEC8> codec, std::string dir_path, std::ofstream &csv) {
 
 	std::cout << "Testing codec: " << codec->name() << " against Images" << std::endl;
 
 	std::map<std::string, double> compressSpeed, uncompressSpeed, compressionRate;
 
-    std::string dir_path = "../rawzor";
-
+    std::cout << std::endl << std::endl;
     std::cout << "====" << dir_path << "X" << codec->name() << std::endl;
-	for (auto file : getAllFilenames(dir_path, ".pgm")) {
-	    std::cout << "~~~~" << file << std::endl;
-				
-		cv::Mat1b img = readPGM8(file);
-		img = img(cv::Rect(0,0,img.cols&0xFF80,img.rows&0xFF80));
-		
-		UncompressedData8 in(img);
-		CompressedData8 compressed;
-		UncompressedData8 uncompressed;
-		
-		TestTimer compressTimer, uncompressTimer;
-		double min_execution_seconds = 0.1;
-		size_t nComp = 32, nUncomp = 32; // Minimum repetition count
-		do {
-			nComp *= 2;
-			codec->compress(in, compressed);
-			compressTimer.start();
-			for (size_t t=0; t<nComp; t++)
-				codec->compress(in, compressed);
-			compressTimer.stop();
-		} while (compressTimer()<min_execution_seconds);
+    for (auto file : getAllFilenames(dir_path, ".pgm")) {
+        std::cout << "~~~~" << file << std::endl;
 
-		do {
-			nUncomp *= 2;
-			codec->uncompress(compressed, uncompressed);
-			uncompressTimer.start();
-			for (size_t t=0; t<nUncomp; t++)
-				codec->uncompress(compressed, uncompressed);
-			uncompressTimer.stop();
-		} while (uncompressTimer()<min_execution_seconds);
-		
-		if ( cv::countNonZero(img != uncompressed.img(img.rows, img.cols)) != 0) {
+        cv::Mat1b img = readPGM8(file);
+        img = img(cv::Rect(0, 0, img.cols & 0xFF80, img.rows & 0xFF80));
+        if (img.cols * img.rows == 0) {
+            std::cerr << "empty image " << file << std::endl;
+            abort();
+        }
+        std::cout << file << ":" << img.cols << "," << img.rows << std::endl;
+
+        UncompressedData8 in(img);
+        CompressedData8 compressed;
+        UncompressedData8 uncompressed;
+
+        TestTimer compressTimer, uncompressTimer;
+        double min_execution_seconds = 1;
+        size_t nComp = 32, nUncomp = 32; // Minimum repetition count
+        do {
+            nComp *= 2;
+            codec->compress(in, compressed);
+            compressTimer.start();
+            for (size_t t = 0; t < nComp; t++)
+                codec->compress(in, compressed);
+            compressTimer.stop();
+        } while (compressTimer() < min_execution_seconds);
+
+        do {
+            nUncomp *= 2;
+            codec->uncompress(compressed, uncompressed);
+            uncompressTimer.start();
+            for (size_t t = 0; t < nUncomp; t++)
+                codec->uncompress(compressed, uncompressed);
+            uncompressTimer.stop();
+        } while (uncompressTimer() < min_execution_seconds);
+
+        bool compressed_ok;
+        if (cv::countNonZero(img != uncompressed.img(img.rows, img.cols)) != 0) {
             std::cerr << "Image uncompressed incorrectly" << std::endl;
             cv::Mat diff = img - uncompressed.img(img.rows, img.cols);
-
+            compressed_ok = false;
+        } else {
+            compressed_ok = true;
         }
 
-		compressSpeed[file] = nComp*in.nBytes()/  compressTimer();
-		uncompressSpeed[file] = nUncomp*in.nBytes()/  uncompressTimer();
-		compressionRate[file] = double(compressed.nBytes())/double(in.nBytes());
+        compressSpeed[file] = nComp * in.nBytes() / compressTimer();
+        uncompressSpeed[file] = nUncomp * in.nBytes() / uncompressTimer();
+        compressionRate[file] = double(compressed.nBytes()) / double(in.nBytes());
 
         double minVal;
         double maxVal;
         cv::Point minLoc;
         cv::Point maxLoc;
-        minMaxLoc(img, &minVal, &maxVal, &minLoc, &maxLoc );
+        minMaxLoc(img, &minVal, &maxVal, &minLoc, &maxLoc);
         csv << codec->name()
-               <<","<< dir_path
-               <<","<< file
-               <<","<< minVal
-               <<","<< maxVal
-               <<","<< img.total()
-               <<","<< compressed.nBytes()
-               <<","<< compressTimer() / nComp
-               <<","<< nComp
-               <<","<< uncompressTimer() / nUncomp
-               <<","<< nUncomp
-               <<","<< std::endl;
-	}
+            << "," << dir_path
+            << "," << file
+            << "," << minVal
+            << "," << maxVal
+            << "," << img.total()
+            << "," << compressed.nBytes()
+            << "," << compressTimer() / nComp
+            << "," << nComp
+            << "," << uncompressTimer() / nUncomp
+            << "," << nUncomp
+            << "," << compressed_ok
+            << std::endl;
+    }
 
-	if (compressionRate.size() * compressSpeed.size() * uncompressSpeed.size() == 0) {
-	    std::cerr << "dir_path " << dir_path << " without images?" << std::endl;
-	    abort();
-	}
+    if (compressionRate.size() * compressSpeed.size() * uncompressSpeed.size() == 0) {
+        std::cerr << "dir_path " << dir_path << " without images?" << std::endl;
+//        abort();
+    }
 
 	double meanCompressionRate=0, meanCompressSpeed=0, meanUncompressSpeed=0;
 	for (auto &e : compressionRate) meanCompressionRate += e.second/compressionRate.size(); 
@@ -336,7 +344,7 @@ static inline std::pair<std::string,std::string> testOnIndividualImages(
 
 	dec << "" << 1./meanCompressionRate << " " << (meanUncompressSpeed/(1<<20)) << " " << codec->name() << " {west}" << std::endl;
 
-	return std::pair<std::string,std::string>(enc.str(), dec.str());	
+	return std::pair<std::string,std::string>(enc.str(), dec.str());
 }
 using namespace std;
 	
@@ -352,7 +360,6 @@ int main( int , char *[] ) {
 		std::make_shared<Rice>(),
 		std::make_shared<RLE>(),
 		std::make_shared<Snappy>(),
-		std::make_shared<Nibble>(),
 		std::make_shared<FiniteStateEntropy>(),
 		std::make_shared<Gipfeli>(),
 		std::make_shared<Gzip>(),
@@ -372,66 +379,46 @@ int main( int , char *[] ) {
 */
 
 	std::vector<shared_ptr<CODEC8>> C = {
-//        std::make_shared<Rice>(),
-//		std::make_shared<RLE>(),
-//		std::make_shared<Snappy>(),
+        std::make_shared<Rice>(),
+		std::make_shared<RLE>(),
+		std::make_shared<Snappy>(),
 //		std::make_shared<Nibble>(),
-//		std::make_shared<FiniteStateEntropy>(),
-//		std::make_shared<Gipfeli>(),
-////             std::make_shared<Gzip>(),
-//		std::make_shared<Lzo>(),
-//		std::make_shared<Huff0>(),
-//		std::make_shared<Lz4>(),
-//		std::make_shared<Zstd>(),
-//		std::make_shared<CharLS>(),
+		std::make_shared<FiniteStateEntropy>(),
+		std::make_shared<Gipfeli>(),
+		std::make_shared<Lzo>(),
+		std::make_shared<Huff0>(),
+		std::make_shared<Lz4>(),
+		std::make_shared<Zstd>(),
 	};
 	Distribution::Type distType = Distribution::Laplace;
 	for (int K=8; K<=10; K++) {
-        for (int O = 0; K+O<=10; O++) {
-            if (O > 1) {
+        for (int O = 0; O <= 4; O++) {
+            if ((O != 0 && O != 2)
+                || (K != 8 && K != 10)) {
                 continue;
             }
             std::map<std::string, double> conf;
             conf["O"] = O;
             conf["K"] = K;
             conf.emplace("minMarlinSymbols", 2);
-            //	conf.emplace("autoMaxWordSize",8);
+//            conf.emplace("maxWordSize", 64);
+//            conf.emplace("autoMaxWordSize",8);
             conf.emplace("purgeProbabilityThreshold", 0.5 / 4096 / 256);
 
             C.push_back(std::make_shared<Marlin2019>(distType, conf));
-            std::cout << "###" << C[C.size()-1]->name() << std::endl;
+            std::cout << "### Generating " << C[C.size()-1]->name() << std::endl;
         }
     }
-//	    std::make_shared<Marlin2018>(Distribution::Laplace,12,0,11),
-//		std::make_shared<Marlin2018>(Distribution::Laplace,12,2,11),
-//		std::make_shared<Marlin2018>(Distribution::Laplace,12,4,11),
-//		std::make_shared<Marlin2018>(Distribution::Laplace,16,0,11),
-//		std::make_shared<Marlin2018>(Distribution::Laplace,12,6,11),
-//		std::make_shared<Marlin2018>(Distribution::Laplace,16,2,11),
-//		std::make_shared<Rice>(),
-//		std::make_shared<RLE>(),
-//		std::make_shared<Snappy>(),
-//		std::make_shared<Nibble>(),
-//		std::make_shared<FiniteStateEntropy>(),
-//		std::make_shared<Gipfeli>(),
-		// std::make_shared<Gzip>(),
-//		std::make_shared<Lzo>(),
-//		std::make_shared<Huff0>(),
-//		std::make_shared<Lz4>(),
-//		std::make_shared<Zstd>(),
-//		std::make_shared<CharLS>(),
 
 	
 	for (auto c : C) {
-		// testCorrectness(c);
-		//
+	    testCorrectness(c);
 	}
 
 	bool run_tex = false;
 
     ofstream tex("out.tex");
 	if (run_tex) {
-
         tex << "\\documentclass{article}" << endl << "\\usepackage[a4paper, landscape, margin=0cm]{geometry}" << endl
             << "\\usepackage{tikz}" << endl << "\\usepackage{pgfplots}" << endl << "\\begin{document}" << endl;
 
@@ -464,22 +451,30 @@ int main( int , char *[] ) {
 	    <<","<< "directory"
 	    <<","<< "file"
         <<","<< "pixel_min"
-        <<","<< "pixel_max"
+         <<","<< "pixel_max"
 	    <<","<< "pixel_count"
 	    <<","<< "compression_bytes"
 	    <<","<< "compression_avg_time_s"
 	    <<","<< "compression_count"
 	    <<","<< "decompression_avg_time_s"
 	    <<","<< "decompression_count"
-        <<","<< std::endl;
+        <<","<< "lossless"
+        << std::endl;
 
 	std::vector<std::string> encodeImages, decodeImages;
 	for (auto c : C) {
 	    std::cout << c->name() << "::" << std::endl;
-		auto res = testOnIndividualImages(c, csv);
-		encodeImages.push_back(res.first);
-		decodeImages.push_back(res.second);
-		std::cout << res.first << res.second;
+        for (auto dir_path : {
+                              "../test_datasets/rawzor",
+                              "../test_datasets/iso_12640_2",
+                              "../test_datasets/kodak_photocd",
+                              "../test_datasets/mixed_datasets",
+                              }) {
+            auto res = testOnIndividualFiles(c, dir_path, csv);
+            encodeImages.push_back(res.first);
+            decodeImages.push_back(res.second);
+            std::cout << res.first << res.second;
+        }
 	}
 	
 	std::cout << "Encoding" << std::endl;

@@ -1131,8 +1131,14 @@ public:
 
 			std::cerr << testData.size() << " " << uncompressedData.size() << std::endl;
 
-			for (size_t i=0; i<10; i++) std::cerr << int(testData[i]) << " | "; std::cerr << std::endl;
-			for (size_t i=0; i<10; i++) std::cerr << int(uncompressedData[i]) << " | "; std::cerr << std::endl;
+			for (size_t i=0; i<10; i++) {
+			    std::cerr << int(testData[i]) << " | ";
+			}
+            std::cerr << std::endl;
+			for (size_t i=0; i<10; i++) {
+                std::cerr << int(uncompressedData[i]) << " | ";
+            }
+			std::cerr << std::endl;
 
 			for (size_t i=0,j=0; i<100000 and i<testData.size() and i<uncompressedData.size(); i++) {
 				j = j*2+int(testData[i]==uncompressedData[i]);
