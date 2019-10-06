@@ -61,8 +61,17 @@ Unless honest mistake, the list of external authors whose code or data is includ
       
     * FSE "is a new kind of [Entropy encoder](http://en.wikipedia.org/wiki/Entropy_encoding),
     based on [ANS theory, from Jarek Duda](http://arxiv.org/abs/1311.2540),
-    achieving precise compression accuracy (like [Arithmetic coding](http://en.wikipedia.org/wiki/Arithmetic_coding)) at much higher speeds."  
+    achieving precise compression accuracy (like [Arithmetic coding](http://en.wikipedia.org/wiki/Arithmetic_coding)) at much higher speeds."
+    
+    * [FAPEC](https://www.dapcom.es/fapec/) by DAPCOM is not included as a binary due to license restrictions. Wrappers for the fapec and unfapec binaries are
+    included in this repository to ease reproducibility, although licensing of those binaries needs be negotiated
+    directly with the authors  
+     
          
 ## Curation  
 Original data in the dataset has been curated by prepending a PGM-like header. This header provides width, height
 and sample depth information so that all samples can be read in an homogeneous way.
+
+# License
+
+[License](./LICENSE)
