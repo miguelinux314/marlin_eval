@@ -1257,6 +1257,9 @@ class MarlinForestMarkov(Forest):
         self.current_tree = self.trees[0]
 
     def get_word_to_next_tree(self):
+        """Implementation of the DefineTransitions routine described in the paper.
+        Determines which words produce transitions to what tree.
+        """
         word_to_next_tree = {}
         for tree in self.trees:
             nodes_by_metastate_index = {i: [] for i in range(max(1, len(self.source.symbols) - 1))}
@@ -1829,7 +1832,7 @@ def plot_efficiency_results(
             marlin_basetree_data = find_by_cls_params(
                 cls=MarlinBaseTree, data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
                 params={"size": 2 ** max_K})
-            marlin_basetree_data.label = f"Non-stationary Tree (Algorithm 3) :: $| \mathcal{{T}}\ | = {size:.0f}$"
+            marlin_basetree_data.label = f"Basic Tree (Algorithm 3): $| \mathcal{{T}}\ | = {size:.0f}$"
             marlin_markovtree_data = filter_marlinforest_selection(
                 data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
                 K=max_K, O=0, S=0, symbol_p_threshold=0)
@@ -1837,11 +1840,11 @@ def plot_efficiency_results(
             assert len(marlin_markovtree_data) >= 1
             marlin_markovtree_data = marlin_markovtree_data[0]
             marlin_markovtree_data.extra_kwargs.update(color="red")
-            marlin_markovtree_data.label = f"Stochastically optimized Tree (Algorithm 4) :: $| \mathcal{{T}}\ | = {size:.0f}$"
+            marlin_markovtree_data.label = f"Stochastically optimized Tree (Algorithm 4): $| \mathcal{{T}}\ | = {size:.0f}$"
             yamamoto_tree_data = find_by_cls_params(
                 cls=YamamotoTree, data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
                 params={"size": size})
-            yamamoto_tree_data.label = f"Yamamoto and Yokoo's Tree :: $|\mathcal{{T}}\ | = {size:.0f}$"
+            yamamoto_tree_data.label = f"Yamamoto and Yokoo's Tree: $|\mathcal{{T}}\ | = {size:.0f}$"
             yamamoto_tree_data.extra_kwargs.update(linestyle="--", color="magenta")
 
             marlin_basetree_data.extra_kwargs.update(dict(linestyle="--"))
@@ -1864,8 +1867,8 @@ def plot_efficiency_results(
             basetree_avg_diff = np.mean(marlin_basetree_data.diff(yamamoto_tree_data).y_values)
             marlin_markovtree_data.diff(yamamoto_tree_data).render()
             markovtree_avg_diff = np.mean(marlin_markovtree_data.diff(yamamoto_tree_data).y_values)
-            print(f"Base tree - YYtree: {marlin_basetree_data.y_label} :: avg diff = {basetree_avg_diff}")
-            print(f"Markov tree - YYtree: {marlin_basetree_data.y_label} :: avg diff = {markovtree_avg_diff}")
+            print(f"Base tree - YYtree: {marlin_basetree_data.y_label}: avg diff = {basetree_avg_diff}")
+            print(f"Markov tree - YYtree: {marlin_basetree_data.y_label}: avg diff = {markovtree_avg_diff}")
             plt.xlim(0, symbol_count_exponent)
             # plt.ylim(min_shown_efficiency, 1)
             plt.legend()
@@ -1884,7 +1887,7 @@ def plot_efficiency_results(
                 cls=YamamotoForest,
                 data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
                 params={"size": size})
-            yamamoto_forest_data.label = f"Yamamoto and Yokoo's Forest :: $|\mathcal{{F}}\ | = {2 ** symbol_count_exponent - 1}$ :: $|\mathcal{{T}}\ | = {size:.0f}$"
+            yamamoto_forest_data.label = f"Yamamoto and Yokoo's Forest: $|\mathcal{{F}}\ | = {2 ** symbol_count_exponent - 1}$,  $|\mathcal{{T}}\ | = {size:.0f}$"
             yamamoto_forest_data.alpha = 0.5
             yamamoto_forest_data.extra_kwargs.update(dict(linestyle="-", color="magenta"))
 
@@ -1894,8 +1897,8 @@ def plot_efficiency_results(
                     data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
                     params={"K": max_K, "O": O})
                 data.label = \
-                    f"Algorithm 6 Forest :: " \
-                    f"$| \mathcal{{F}}\ | = 2^O = {2 ** O}$ :: $| \mathcal{{T}}\ | = 2^K = {2 ** max_K}$"
+                    f"Algorithm 6 Forest: " \
+                    f"$| \mathcal{{F}}\ | = 2^\Omega = {2 ** O}$, $| \mathcal{{T}}\ | = 2^K = {2 ** max_K}$"
                 data.alpha = 0.5
                 if O is O_values[0]:
                     data.extra_kwargs = {"linestyle": "--", "color":"red"}
@@ -1926,10 +1929,10 @@ def plot_efficiency_results(
                         cls=MarlinForestMarkov,
                         params={"K": K, "O": O, "S": S, "symbol_p_threshold": symbol_p_threshold})
                     data.label = \
-                        f"Algorithm 6 Forest :: " \
-                        f"$| \mathcal{{F}}\ | = 2^O = {2 ** O}$ " \
-                        f":: $| \mathcal{{T}}\ | = 2^K = {2 ** K}$ " \
-                        f":: S = {S} " \
+                        f"Algorithm 6 Forest: " \
+                        f"$| \mathcal{{F}}\ | = 2^\Omega = {2 ** O}$, " \
+                        f"$| \mathcal{{T}}\ | = 2^K = {2 ** K}$, " \
+                        f"S = {S} " \
                         ""
                     # f":: $\Theta = {symbol_p_threshold}$" \
                     data.extra_kwargs["linestyle"] = ":" if symbol_p_threshold != 0 else "-"
@@ -1948,7 +1951,9 @@ def plot_efficiency_results(
                 cls=YamamotoForest,
                 data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
                 params={"size": size})
-            yamamoto_forest_data.label = f"Yamamoto and Yokoo's Forest :: $|\mathcal{{F}}\ | = {2 ** symbol_count_exponent - 1}$ :: $|\mathcal{{T}}\ | = {size:.0f}$"
+            yamamoto_forest_data.label = f"Yamamoto and Yokoo's Forest: $|\mathcal{{F}}\ | " \
+                                         f"= {2 ** symbol_count_exponent - 1}$, " \
+                                         f"$|\mathcal{{T}}\ | = {size:.0f}$"
             yamamoto_forest_data.alpha = 0.5
             yamamoto_forest_data.extra_kwargs.update(linestyle="-", color="magenta")
             yamamoto_forest_data.render()
