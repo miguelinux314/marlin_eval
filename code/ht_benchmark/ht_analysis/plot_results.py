@@ -126,11 +126,11 @@ if __name__ == '__main__':
 \textbf{Directory} & \textbf{$\mathbf{10^6} \cdot$~Samples} & \textbf{Entropy (bps)}\\
 \toprule""")
         df_by_dir = {}
-        for dir, dir_df in entropy_df.groupby("directory"):
-            df_by_dir[dir] = dir_df
-            if any(s in dir for s in ("dpcm", "uci_")):
+        for directory, dir_df in entropy_df.groupby("directory"):
+            df_by_dir[directory] = dir_df
+            if any(s in directory for s in ("dpcm", "uci_")):
                 continue
-            fields = [pretty_dict[dir] if dir in pretty_dict else dir]
+            fields = [pretty_dict[directory] if directory in pretty_dict else directory]
             fields.append(f"{dir_df['sample_count'].sum() / 10**6:.2f}")
             # fields.append(f"{dir_df['entropy'].min():.2f}")
             # fields.append(f"{dir_df['entropy'].max():.2f}")
@@ -157,62 +157,76 @@ if __name__ == '__main__':
         df["decompression_speed_mss"] = (df["pixel_count"] / df["decompression_avg_time_s"]) / speed_factor
 
         # Compression time vs bps
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        # x_dimension = "compression_rate_bps"
         x_dimension = "compression_efficiency"
         y_dimension = "compression_speed_mss"
-        plt_subirs = False
-        all_codec_data = []
-        for i, (codec_name, codec_df) in enumerate(df.groupby("codec_name")):
-            codec_data = ScatterData(x_values=[codec_df[x_dimension].mean()],
-                                     y_values=[codec_df[y_dimension].mean()])
-            codec_data.label = codec_name if codec_name not in pretty_dict else pretty_dict[codec_name]
-            codec_data.x_label = pretty_dict[x_dimension]
-            codec_data.y_label =  pretty_dict[y_dimension]
-            codec_data.extra_kwargs = dict(
-                marker=markers[i % len(markers)] if "marlin" not in codec_name.lower() else "o",
-                color=colors[i % len(colors)],
-                s=marker_size)
-            all_codec_data.append(codec_data)
-        for data in sorted(all_codec_data, key=lambda pd: pd.label):
-            # leg, data.label = data.label, None
-            data.render()
-            # data.label = leg
-        legend = plt.legend(loc="lower center", bbox_to_anchor=(0.5, 1), ncol=4)
-        export_legend(legend, "legend_compression.pdf")
-        # plt.xlim(4.5, 8.5)
-        # plt.xlim(0, 1)
-        # plt.ylim(0, 7)
+        fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+        ax1 = plt.subplot2grid((5, 1), (0, 0))
+        ax2 = plt.subplot2grid((5, 1), (1, 0), rowspan=4)
+        ax1.spines['bottom'].set_alpha(0.1)
+        ax2.spines['top'].set_alpha(0.1)
+        ax1.xaxis.tick_top()
+        ax1.tick_params(labeltop=False)  # don't put tick labels at the top
+        ax2.xaxis.tick_bottom()
+        fig.text(0.04, 0.5, pretty_dict[y_dimension], va='center', rotation='vertical')
+        for ax in [ax1, ax2]:
+            plt_subirs = False
+            all_codec_data = []
+            for i, (codec_name, codec_df) in enumerate(df.groupby("codec_name")):
+                codec_data = ScatterData(x_values=[codec_df[x_dimension].mean()],
+                                         y_values=[codec_df[y_dimension].mean()])
+                codec_data.label = codec_name if codec_name not in pretty_dict else pretty_dict[codec_name]
+                codec_data.x_label = pretty_dict[x_dimension]
+                d = .015
+                codec_data.extra_kwargs = dict(
+                    marker=markers[i % len(markers)] if "marlin" not in codec_name.lower() else "o",
+                    color=colors[i % len(colors)],
+                    s=marker_size)
+                all_codec_data.append(codec_data)
+            for data in sorted(all_codec_data, key=lambda pd: pd.label):
+                leg, data.label = data.label, None
+                data.y_label = ""
+                data.render(ax=ax)
+                data.label = leg
+        ax1.set_ylim(8, 10)
+        ax2.set_ylim(0, 2.5)
         plt.savefig(f"allcodecs_{df_label}_coding_speed_vs_compression_rate.pdf", bbox_inches="tight")
         plt.close()
 
         # Decompression time vs bps
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
+        fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+        ax1 = plt.subplot2grid((5, 1), (0, 0))
+        ax2 = plt.subplot2grid((5, 1), (1, 0), rowspan=4)
+        ax1.spines['bottom'].set_alpha(0.1)
+        ax2.spines['top'].set_alpha(0.1)
+        ax1.xaxis.tick_top()
+        ax1.tick_params(labeltop=False)  # don't put tick labels at the top
+        ax2.xaxis.tick_bottom()
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111)
         x_dimension = "compression_efficiency"
         y_dimension = "decompression_speed_mss"
-        plt_subirs = False
-        all_codec_data = []
-        for i, (codec_name, codec_df) in enumerate(df.groupby("codec_name")):
-            codec_data = ScatterData(x_values=[codec_df[x_dimension].mean()],
-                                     y_values=[codec_df[y_dimension].mean()])
-            codec_data.label = codec_name if codec_name not in pretty_dict else pretty_dict[codec_name]
-            codec_data.x_label = pretty_dict[x_dimension]
-            codec_data.y_label = pretty_dict[y_dimension]
-            codec_data.extra_kwargs = dict(
-                marker=markers[i % len(markers)] if "marlin" not in codec_name.lower() else "o",
-                color=colors[i % len(colors)],
-                s=marker_size)
-            all_codec_data.append(codec_data)
-        for data in sorted(all_codec_data, key=lambda pd: pd.label):
-            # leg, data.label = data.label, None
-            data.render()
-            # data.label = leg
-        plt.legend(loc="lower center", bbox_to_anchor=(0.5, 1), ncol=4)
-        # plt.xlim(4.5, 8.5)
-        # plt.xlim(0, 1)
-        # plt.ylim(0, 7)
+        fig.text(0.04, 0.5, pretty_dict[y_dimension], va='center', rotation='vertical')
+        for ax in [ax1, ax2]:
+            plt_subirs = False
+            all_codec_data = []
+            for i, (codec_name, codec_df) in enumerate(df.groupby("codec_name")):
+                codec_data = ScatterData(x_values=[codec_df[x_dimension].mean()],
+                                         y_values=[codec_df[y_dimension].mean()])
+                codec_data.label = codec_name if codec_name not in pretty_dict else pretty_dict[codec_name]
+                codec_data.x_label = pretty_dict[x_dimension]
+                codec_data.y_label = pretty_dict[y_dimension]
+                codec_data.extra_kwargs = dict(
+                    marker=markers[i % len(markers)] if "marlin" not in codec_name.lower() else "o",
+                    color=colors[i % len(colors)],
+                    s=marker_size)
+                all_codec_data.append(codec_data)
+            for data in sorted(all_codec_data, key=lambda pd: pd.label):
+                leg, data.label = data.label, None
+                data.y_label = ""
+                data.render(ax=ax)
+                data.label = leg
+        ax1.set_ylim(8, 10)
+        ax2.set_ylim(0, 5)
         plt.savefig(f"allcodecs_{df_label}_decoding_speed_vs_compression_rate.pdf", bbox_inches="tight")
         plt.close()
 

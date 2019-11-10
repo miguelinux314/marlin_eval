@@ -19,12 +19,12 @@ class PlottableData:
         self.label = label
         self.extra_kwargs = extra_kwargs if extra_kwargs is not None else {}
 
-    def render(self):
+    def render(self, ax=None):
         """Render data in current figure
         """
         raise NotImplementedError()
 
-    def render_axis_labels(self):
+    def render_axis_labels(self, ax=None):
         """Add axis labels in current figure - don't show or save the result
         """
         raise NotImplementedError()
@@ -58,18 +58,19 @@ class PlottableData2D(PlottableData):
         self.x_label = x_label
         self.y_label = y_label
 
-    def render(self):
+    def render(self, ax=None):
         """Plot 2D data using plt.plot()
 
         :param anchor: if not None, the difference self-anchor is rendered instead of self
         """
-        plt.plot(self.x_values, self.y_values, label=self.label, alpha=self.alpha,
+        ax = plt if ax is None else ax
+        ax.plot(self.x_values, self.y_values, label=self.label, alpha=self.alpha,
                  **self.extra_kwargs)
-        self.render_axis_labels()
+        self.render_axis_labels(ax=ax)
         if self.label is not None:
             plt.legend(loc="lower center", bbox_to_anchor=(0.5, 1))
 
-    def render_axis_labels(self):
+    def render_axis_labels(self, ax=None):
         """        Show the labels in label list (if not None) or in self.axis_label_list
           (if label_list None) in the current figure.
         """
@@ -89,9 +90,10 @@ class PlottableData2D(PlottableData):
 LineData = PlottableData2D
 
 class ScatterData(PlottableData2D):
-    def render(self):
-        plt.scatter(self.x_values, self.y_values, label=self.label, alpha=self.alpha,
+    def render(self, ax=None):
+        ax = plt if ax is None else ax
+        ax.scatter(self.x_values, self.y_values, label=self.label, alpha=self.alpha,
                     **self.extra_kwargs)
-        self.render_axis_labels()
+        self.render_axis_labels(ax=ax)
         if self.label is not None:
             plt.legend(loc="lower center", bbox_to_anchor=(0.5, 1))

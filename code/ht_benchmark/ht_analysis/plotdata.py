@@ -11,7 +11,7 @@ matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
 class PlottableData:
-    alpha = 0.75
+    alpha = 0.5
 
     def __init__(self, data=None, axis_labels=None, label=None, extra_kwargs=None):
         self.data = data
@@ -19,12 +19,12 @@ class PlottableData:
         self.label = label
         self.extra_kwargs = extra_kwargs if extra_kwargs is not None else {}
 
-    def render(self):
+    def render(self, ax=None):
         """Render data in current figure
         """
         raise NotImplementedError()
 
-    def render_axis_labels(self):
+    def render_axis_labels(self, ax=None):
         """Add axis labels in current figure - don't show or save the result
         """
         raise NotImplementedError()
@@ -37,8 +37,7 @@ class PlottableData2D(PlottableData):
     def __init__(self, x_values, y_values,
                  x_label=None, y_label=None,
                  label=None, extra_kwargs=None,
-                 remove_duplicates=True,
-                 alpha=None):
+                 remove_duplicates=True):
         """
         :param x_values, y_values: values to be plotted (only a reference is kept)
         :param x_label, y_label: axis labels
@@ -58,20 +57,20 @@ class PlottableData2D(PlottableData):
         self.y_values = y_values
         self.x_label = x_label
         self.y_label = y_label
-        self.alpha = alpha if alpha is not None else self.alpha
 
-    def render(self):
+    def render(self, ax=None):
         """Plot 2D data using plt.plot()
 
         :param anchor: if not None, the difference self-anchor is rendered instead of self
         """
-        plt.plot(self.x_values, self.y_values, label=self.label, alpha=self.alpha,
+        ax = plt if ax is None else ax
+        ax.plot(self.x_values, self.y_values, label=self.label, alpha=self.alpha,
                  **self.extra_kwargs)
-        self.render_axis_labels()
+        self.render_axis_labels(ax=ax)
         if self.label is not None:
             plt.legend(loc="lower center", bbox_to_anchor=(0.5, 1))
 
-    def render_axis_labels(self):
+    def render_axis_labels(self, ax=None):
         """        Show the labels in label list (if not None) or in self.axis_label_list
           (if label_list None) in the current figure.
         """
@@ -91,11 +90,10 @@ class PlottableData2D(PlottableData):
 LineData = PlottableData2D
 
 class ScatterData(PlottableData2D):
-    alpha = 0.5
-
-    def render(self):
-        plt.scatter(self.x_values, self.y_values, label=self.label, alpha=self.alpha,
+    def render(self, ax=None):
+        ax = plt if ax is None else ax
+        ax.scatter(self.x_values, self.y_values, label=self.label, alpha=self.alpha,
                     **self.extra_kwargs)
-        self.render_axis_labels()
-        if self.label:
+        self.render_axis_labels(ax=ax)
+        if self.label is not None:
             plt.legend(loc="lower center", bbox_to_anchor=(0.5, 1))
