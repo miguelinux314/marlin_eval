@@ -1847,7 +1847,7 @@ def plot_efficiency_results(
             yamamoto_tree_data.label = f"Yamamoto and Yokoo's Tree: $|\mathcal{{T}}\ | = {size:.0f}$"
             yamamoto_tree_data.extra_kwargs.update(linestyle="--", color="magenta")
 
-            marlin_basetree_data.extra_kwargs.update(dict(linestyle="--"))
+            marlin_basetree_data.extra_kwargs.update(dict(linestyle="-"))
             marlin_markovtree_data.extra_kwargs.update(dict(linestyle="--"))
 
 
