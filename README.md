@@ -20,7 +20,7 @@ Tested on Ubuntu 18.04 LTS.
 >   python3 python3-numpy python3-scipy python3-pandas python3-matplotlib
 
 2. Run all tests
-> $ cd code; ./main.sh
+> $ cd code; ./run
 
 # Dataset information
 ## External authors 
