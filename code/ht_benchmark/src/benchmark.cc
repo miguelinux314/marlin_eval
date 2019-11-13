@@ -328,10 +328,10 @@ int main( int , char *[] ) {
 	for (auto c : C) {
 	    std::cout << c->name() << "::" << std::endl;
         for (auto dir_path : {
-                              "../../test_datasets/rawzor",
-                              "../../test_datasets/iso_12640_2",
-                              "../../test_datasets/kodak_photocd",
-                              "../../test_datasets/mixed_datasets",
+                              "../../../data/rawzor",
+                              "../../../data/iso_12640_2",
+                              "../../../data/kodak_photocd",
+                              "../../../data/mixed_datasets",
                               }) {
             auto res = testOnIndividualFiles(c, dir_path, csv);
             encodeImages.push_back(res.first);

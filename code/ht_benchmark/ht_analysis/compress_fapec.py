@@ -104,7 +104,7 @@ if __name__ == '__main__':
 
     df = pd.read_csv(original_csv_path)
 
-    all_images = list(itertools.chain(*(glob.glob(f"../../test_datasets/{d}/*.pgm") for d in plot_results.included_dirs)))
+    all_images = list(itertools.chain(*(glob.glob(f"../../../data/{d}/*.pgm") for d in plot_results.included_dirs)))
     for i, input_image in enumerate(all_images):
 
         print(f"Compressing image {i + 1}: {input_image}")
