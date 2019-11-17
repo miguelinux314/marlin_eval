@@ -1897,7 +1897,7 @@ def plot_efficiency_results(
                     data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
                     params={"K": max_K, "O": O})
                 data.label = \
-                    f"Algorithm 6 Forest: " \
+                    f"Algorithm 7 Forest: " \
                     f"$| \mathcal{{F}}\ | = 2^\Omega = {2 ** O}$, $| \mathcal{{T}}\ | = 2^K = {2 ** max_K}$"
                 data.alpha = 0.5
                 if O is O_values[0]:
@@ -1929,7 +1929,7 @@ def plot_efficiency_results(
                         cls=MarlinForestMarkov,
                         params={"K": K, "O": O, "S": S, "symbol_p_threshold": symbol_p_threshold})
                     data.label = \
-                        f"Algorithm 6 Forest: " \
+                        f"Algorithm 7 Forest: " \
                         f"$| \mathcal{{F}}\ | = 2^\Omega = {2 ** O}$, " \
                         f"$| \mathcal{{T}}\ | = 2^K = {2 ** K}$, " \
                         f"S = {S} " \

@@ -73,9 +73,9 @@ def get_image_entropy_df(image_paths):
     return entropy_df
 
 def export_legend(legend, filename):
-    fig  = legend.figure
+    fig = legend.figure
     fig.canvas.draw()
-    bbox  = legend.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    bbox = legend.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
     fig.savefig(filename, dpi="figure", bbox_inches=bbox)
 
 if __name__ == '__main__':
@@ -90,13 +90,13 @@ if __name__ == '__main__':
 
     pretty_dict = {
         "Marlin2019 distType:Laplacian K:10 O:0 minMarlinSymbols:2 numDict:11 purgeProbabilityThreshold:4.76837e-07 K:10 O:0 S:1.72727":
-            r"Algorithm 6 :: $|\mathcal{F}\| = 2^O = 1$ :: $|\mathcal{T}\ | = 1024$",
+            r"Algorithm 7, $|\mathcal{F}\| = 2^\Omega = 1$, $|\mathcal{T}\ | = 2^K = 1024$",
         "Marlin2019 distType:Laplacian K:10 O:2 minMarlinSymbols:2 numDict:11 purgeProbabilityThreshold:4.76837e-07 K:10 O:2 S:1.90909":
-            r"Algorithm 6 :: $|\mathcal{F}\| = 2^O = 4$ :: $|\mathcal{T}\ | = 1024$",
+            r"Algorithm 7, $|\mathcal{F}\| = 2^\Omega = 4$, $|\mathcal{T}\ | = 2^K = 1024$",
         "Marlin2019 distType:Laplacian K:8 O:0 minMarlinSymbols:2 numDict:11 purgeProbabilityThreshold:4.76837e-07 K:8 O:0 S:1.90909":
-            r"Algorithm 6 :: $|\mathcal{F}\| = 2^O = 1$ :: $|\mathcal{T}\ | = 256$",
+            r"Algorithm 7, $|\mathcal{F}\| = 2^\Omega = 1$, $|\mathcal{T}\ | = 2^K = 256$",
         "Marlin2019 distType:Laplacian K:8 O:2 minMarlinSymbols:2 numDict:11 purgeProbabilityThreshold:4.76837e-07 K:8 O:2 S:1.90909":
-            r"Algorithm 6 :: $|\mathcal{F}\| = 2^O = 4$ :: $|\mathcal{T}\ | = 256$",
+            r"Algorithm 7, $|\mathcal{F}\| = 2^\Omega = 4$, $|\mathcal{T}\ | = 2^K = 256$",
         "fapec": "FAPEC",
         "Zstd1": "Zstd",
         "Lzo1-15 1": "LZO",
@@ -187,6 +187,9 @@ if __name__ == '__main__':
                 data.y_label = ""
                 data.render(ax=ax)
                 data.label = leg
+        # legend = plt.legend(loc="lower center", bbox_to_anchor=(0.5, 1.5), ncol=4)
+        # export_legend(legend, "legend_compression.pdf")
+
         ax1.set_ylim(8, 10)
         ax2.set_ylim(0, 2.5)
         plt.savefig(f"allcodecs_{df_label}_coding_speed_vs_compression_rate.pdf", bbox_inches="tight")
@@ -226,7 +229,7 @@ if __name__ == '__main__':
                 data.render(ax=ax)
                 data.label = leg
         ax1.set_ylim(8, 10)
-        ax2.set_ylim(0, 5)
+        ax2.set_ylim(0, 5.5)
         plt.savefig(f"allcodecs_{df_label}_decoding_speed_vs_compression_rate.pdf", bbox_inches="tight")
         plt.close()
 
@@ -250,16 +253,16 @@ if __name__ == '__main__':
         def filter_label(l):
             for original, replacement in {
                 "Marlin2019 distType:Laplacian K:10 O:0 minMarlinSymbols:2 numDict:11 purgeProbabilityThreshold:4.76837e-07 K:10 O:0 S:1.72727":
-                    r"Alg.~\ref{alg:markov_forest}~--~K:10, O:0",
+                    r"Alg.~\ref{alg:markov_forest}~--~$K$:10, $\Omega$:0",
 
                 "Marlin2019 distType:Laplacian K:10 O:2 minMarlinSymbols:2 numDict:11 purgeProbabilityThreshold:4.76837e-07 K:10 O:2 S:1.90909":
-                    r"Alg.~\ref{alg:markov_forest}~--~K:10, O:2",
+                    r"Alg.~\ref{alg:markov_forest}~--~$K$:10, $\Omega$:2",
 
                 "Marlin2019 distType:Laplacian K:8 O:0 minMarlinSymbols:2 numDict:11 purgeProbabilityThreshold:4.76837e-07 K:8 O:0 S:1.90909":
-                    r"Alg.~\ref{alg:markov_forest}~--~K:8, O:0",
+                    r"Alg.~\ref{alg:markov_forest}~--~$K$:8, $\Omega$:0",
 
                 "Marlin2019 distType:Laplacian K:8 O:2 minMarlinSymbols:2 numDict:11 purgeProbabilityThreshold:4.76837e-07 K:8 O:2 S:1.90909":
-                    r"Alg.~\ref{alg:markov_forest}~--~K:8, O:2"}.items():
+                    r"Alg.~\ref{alg:markov_forest}~--~$K$:8, $\Omega$:2"}.items():
                 l = l.replace(original, replacement)
             try:
                 return pretty_dict[l]
@@ -277,7 +280,7 @@ if __name__ == '__main__':
                 group_df = pd.concat([codec_df[codec_df.directory.str.contains(dir)]
                                        for dir in dir_list])
                 rate, c_time, d_time = group_df[target_table_columns].mean()
-                fields.append(f"{rate:.2f}~{c_time:.3f}~{d_time:.4f}")
+                fields.append(f"{rate:.2f}&{c_time:.2f}&{d_time:.2f}")
             # # Grand total
             # rate, c_time, d_time = codec_df[
             #     target_table_columns].mean()
