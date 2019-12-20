@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Tests for compare_marlin_yamamoto.py
 """
-__author__ = "Miguel Hernández Cabronero <mhernandez@deic.uab.cat>"
+__author__ = "Miguel Hernández Cabronero <miguel.hernandez@uab.cat>"
 __date__ = "03/08/2019"
 
 import tempfile

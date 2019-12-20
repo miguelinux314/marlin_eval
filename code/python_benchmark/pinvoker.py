@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Parallel invocation of kwarg functions with arbitrary return types using multiprocessing
 """
-__author__ = "Miguel Hernández Cabronero <mhernandez@deic.uab.cat>"
+__author__ = "Miguel Hernández Cabronero <miguel.hernandez@uab.cat>"
 __date__ = "30/07/2019"
 
 import os

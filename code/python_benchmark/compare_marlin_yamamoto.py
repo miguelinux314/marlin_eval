@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Compare MarlinBaseTree chapters and other dictionaries
 """
-__author__ = "Miguel Hernández Cabronero <mhernandez@deic.uab.cat>"
+__author__ = "Miguel Hernández Cabronero <miguel.hernandez@uab.cat>"
 __date__ = "04/07/2019"
 
 import os
@@ -16,8 +16,10 @@ import itertools
 import pickle
 import shutil
 import collections
+import re
 import matplotlib
-matplotlib.use('Agg')
+
+# matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 import pinvoker
 import pandas as pd
@@ -34,9 +36,15 @@ symbol_count_exponent = 4
 symbol_count = 2 ** symbol_count_exponent  # Number of symbols in the source
 test_input_length = 10 ** 4 if minimal_run else 2 ** 17  # Length of the synthetic sequences
 # minimum, maximum entropy (relative to the theoretical maximum) and number of distributions to evaluate
-min_max_count_tested_e_fractions = (0, 1, 40)
-# Fixed seed to make results reproducible
-seed = (0xbadc0ffe3 + 0x1fa14fe1) % (2 ** 32 - 1)
+min_max_count_tested_e_fractions = (0, 1, 41)
+K_analysis_values = list(range(symbol_count_exponent + 2, 15, 2))
+O_analysis_values = [0, 1, 2, 3, 4]
+K_for_O_analysis = 8
+shift_K_value = 8
+shift_O_value = 4
+
+test_dumped_codecs = False
+
 show_progress = False
 exit_on_error = True
 multiprocess_verbose = True
@@ -45,6 +53,10 @@ min_shown_efficiency = 0.5
 generate_fig1 = True
 generate_fig2 = True
 generate_fig3 = True
+generate_fig_k = True
+
+if any(not g for g in [generate_fig1, generate_fig2, generate_fig3, generate_fig_k]):
+    print("Warning: not all figures generated")
 
 # Everything else is a parameter
 efficiency_common_columns = [
@@ -58,7 +70,7 @@ process_limit = None  # None to use all, 1 to use a single process
 os.nice(10)
 
 # Simulation paths
-efficiency_results_path = "efficiency_results.csv"
+efficiency_results_template = "efficiency_results_seed{}.csv"
 overwrite_efficiency_results = False
 
 input_plot_dir = "plots/input"
@@ -106,19 +118,21 @@ class Symbol:
 class Source:
     min_symbol_probability = 1e-10
 
-    def __init__(self, symbols, affix=""):
+    def __init__(self, symbols, seed=None, affix=""):
         if symbols:
             assert round(sum(s.p for s in symbols), 10) == 1, symbols
             assert all(s.p >= 0 for s in symbols)
         self.symbols = list(sorted(symbols, key=lambda s: -s.p))
         self.affix = affix
+        self.seed = seed
 
     @property
     def name(self):
         name = f"{self.__class__.__name__}"
         if self.affix:
             name += f"_{self.affix}"
-        name += f"_{len(self.symbols)}symbols_entropy{self.entropy:.7f}"
+        name += f"_{len(self.symbols)}symbols_entropy{self.entropy:.7f}" \
+                f"_seed{hex(self.seed) if self.seed is not None else None}"
         return name
 
     @staticmethod
@@ -162,7 +176,7 @@ class Source:
         return meta_source, metasymbol_to_symbols, symbol_to_metasymbol_remainder
 
     @staticmethod
-    def get_laplacian(symbol_count, max_entropy_fraction):
+    def get_laplacian(symbol_count, max_entropy_fraction, seed):
         """
         :param max_entropy_fraction: fraction of the maximum entropy (ie, the entropy
           obtained for a uniform distribution) for the returned Source
@@ -201,7 +215,8 @@ class Source:
                                    f"symbol_count={symbol_count} "
                                    f"max_entropy_fraction={max_entropy_fraction}")
 
-        source = Source([Symbol(label=i, p=p) for i, p in enumerate(pdf)])
+        source = Source([Symbol(label=i, p=p) for i, p in enumerate(pdf)],
+                        seed=seed)
 
         source.affix = "Laplacian"
         assert (max_entropy_fraction - source.entropy / max_entropy) <= 1e-10, (
@@ -220,9 +235,7 @@ class Source:
         """
         ideal_symbols = list(itertools.chain(*([symbol] * math.ceil(symbol.p * count)
                                                for symbol in self.symbols)))
-        ideal_symbols += [self.symbols[0]] * (count - len(ideal_symbols))
-        ideal_symbols = ideal_symbols[len(ideal_symbols) - count:]
-        np.random.seed(seed)
+        np.random.seed(self.seed)
         np.random.shuffle(ideal_symbols)
         assert abs(len(ideal_symbols) - count) < len(self.symbols), (len(ideal_symbols), count)
         if count > 10 ** 4:
@@ -400,7 +413,7 @@ class Tree(Codec):
 
         :param size: number of nodes to be had in the tree's dictionary
         """
-        self.source = source
+        self.source = Source(symbols=list(source.symbols), seed=None)
         assert size >= len(self.source.symbols), (size, len(self.source.symbols))
         self.size = size
         self.root = Node(symbol=Symbol(label="root", p=0))
@@ -636,9 +649,6 @@ class MarlinTreeMarkov(MarlinBaseTree):
                     transition_matrix[i, :] = 1
                     transition_matrix[i, :] /= np.sum(transition_matrix[i, :])
 
-            # assert abs(np.sum(transition_matrix) - len(self.state_probabilities)) < 5e-6, \
-            #     (transition_matrix, np.sum(transition_matrix), len(self.state_probabilities))
-
             iteration_count = 0
             for i in range(100):
                 iteration_count += 1
@@ -811,7 +821,7 @@ class Forest(Codec):
         self.tree_sizes = list(tree_sizes)
         self.trees = []
         self.current_tree = None
-        self.word_to_next_tree = {}
+        self.node_to_next_tree = {}
         self.source = source
 
         super().__init__(build=build)
@@ -827,7 +837,7 @@ class Forest(Codec):
     def code_one_word(self, input):
         node, new_input = self.current_tree.code_one_word(input)
         try:
-            self.current_tree = self.word_to_next_tree[node.word]
+            self.current_tree = self.node_to_next_tree[node]
         except KeyError as ex:
             if len(new_input) == 0:
                 self.current_tree = None
@@ -866,11 +876,8 @@ class Forest(Codec):
         os.makedirs(output_dir)
         try:
             tree_node_list = [tree.included_nodes for tree in self.trees]
-            tree_word_list = [[node.word for node in tree_nodes] for tree_nodes in tree_node_list]
-            flat_word_list = list(itertools.chain(*tree_word_list))
-
-            next_tree_by_word_index = [self.trees[self.trees.index(self.word_to_next_tree[word])]
-                                       for word in flat_word_list]
+            next_tree_by_word_index = [self.trees[self.trees.index(self.node_to_next_tree[node])]
+                                       for node in tree_node_list]
 
             pickle.dump(self.source, open(os.path.join(output_dir, "source.pickle"), "wb"))
             pickle.dump(tree_word_list, open(os.path.join(output_dir, "tree_word_list.pickle"), "wb"))
@@ -1006,7 +1013,7 @@ class TrivialForest(Forest):
 
         for tree in self.trees:
             for i, node in enumerate(tree.included_nodes):
-                self.word_to_next_tree[node.word] = self.trees[i % len(self.trees)]
+                self.node_to_next_tree[node] = self.trees[i % len(self.trees)]
 
         self.current_tree = self.trees[0]
 
@@ -1030,7 +1037,7 @@ class YamamotoForest(Forest):
                 sys.stdout.flush()
             self.trees.append(YamamotoTree(size=size, source=self.source, first_allowed_symbol_index=i))
         for node in self.included_nodes:
-            self.word_to_next_tree[node.word] = self.trees[0]
+            self.node_to_next_tree[node] = self.trees[min(len(self.trees) - 1, len(node.symbol_to_node.keys()))]
         self.current_tree = self.trees[0]
 
     @property
@@ -1075,7 +1082,8 @@ class MarlinForestMarkov(Forest):
         assert self.K > self.O  # To meet the required number of transitions between trees
 
         self.is_raw = is_raw
-        self.original_source = Source(symbols=source.symbols) if original_source is None else original_source
+        self.original_source = Source(symbols=source.symbols) if original_source is None \
+            else Source(symbols=list(original_source.symbols))
         self.symbol_p_threshold = symbol_p_threshold
         assert 0 <= self.symbol_p_threshold <= 1
 
@@ -1097,7 +1105,7 @@ class MarlinForestMarkov(Forest):
         source = Source([Symbol(label=ss.label, p=ss.p / selected_p_sum)
                          for ss in selected_symbols])
 
-        # selected_symbol_ratio = len(source.symbols) / len(meta_symbols)
+        selected_symbol_ratio = len(source.symbols) / len(meta_symbols)
         auxiliary_root = Node(symbol=None, parent=None)
         self.symbol_to_auxiliary_node = {
             non_selected_symbol: auxiliary_root.add_child(symbol=non_selected_symbol)
@@ -1159,7 +1167,7 @@ class MarlinForestMarkov(Forest):
         state_index = tmatrix_index % (len(self.source.symbols) - 1)
         return tree, state_index
 
-    def build(self, max_iterations=30):
+    def build(self, max_iterations=50):
         # Initial tree building and linking
         for size in self.tree_sizes:
             if show_progress:
@@ -1170,10 +1178,10 @@ class MarlinForestMarkov(Forest):
         if len(self.source) == 1:
             self.is_raw = True
             self.trees = self.trees[:1]
-            self.word_to_next_tree = {node.word: self.trees[0] for node in self.trees[0].included_nodes}
+            self.node_to_next_tree = {node: self.trees[0] for node in self.trees[0].included_nodes}
             self.current_tree = self.trees[0]
         else:
-            self.word_to_next_tree = self.get_word_to_next_tree()
+            self.node_to_next_tree = self.get_node_to_next_tree()
             states_per_tree = len(self.source.symbols) - 1
             state_count = states_per_tree * 2 ** self.O
             state_probabilities = np.zeros(state_count)
@@ -1192,7 +1200,7 @@ class MarlinForestMarkov(Forest):
                     for from_index in range(states_per_tree):
                         row = self.tree_index_to_tmatrix_index(tree=from_tree, index=from_index)
                         for node in from_tree.included_nodes:
-                            to_tree = self.word_to_next_tree[node.word]
+                            to_tree = self.node_to_next_tree[node]
                             to_index = min(state_count - 1, len(node.symbol_to_node))
                             col = self.tree_index_to_tmatrix_index(tree=to_tree, index=to_index)
 
@@ -1215,7 +1223,7 @@ class MarlinForestMarkov(Forest):
                                 j] += state_p * transition_p  # P(transition) = sum_state P(transition|state)
                     delta = sum(abs(old - new) for old, new in zip(old_state_probabilities, state_probabilities))
                     min_delta = min(delta, min_delta)
-                    if delta < 1e-8:
+                    if delta < 5e-7:
                         break
                     old_state_probabilities = np.array(state_probabilities)
                 mse = 0
@@ -1241,7 +1249,7 @@ class MarlinForestMarkov(Forest):
                     if previous_words != new_words:
                         all_equal = False
 
-                self.word_to_next_tree = self.get_word_to_next_tree()
+                self.node_to_next_tree = self.get_node_to_next_tree()
 
                 new_words = sorted((node.word for node in self.included_nodes),
                                    key=lambda word: str(word))
@@ -1256,11 +1264,11 @@ class MarlinForestMarkov(Forest):
 
         self.current_tree = self.trees[0]
 
-    def get_word_to_next_tree(self):
+    def get_node_to_next_tree(self):
         """Implementation of the DefineTransitions routine described in the paper.
         Determines which words produce transitions to what tree.
         """
-        word_to_next_tree = {}
+        node_to_next_tree = {}
         for tree in self.trees:
             nodes_by_metastate_index = {i: [] for i in range(max(1, len(self.source.symbols) - 1))}
             for node in tree.included_nodes:
@@ -1275,12 +1283,12 @@ class MarlinForestMarkov(Forest):
             for i, tree in enumerate(self.trees):
                 assert len(tree.included_nodes) == 2 ** self.K
                 for node in sorted_nodes[i * 2 ** (self.K - self.O):(i + 1) * 2 ** (self.K - self.O)]:
-                    word_to_next_tree[node.word] = tree
+                    node_to_next_tree[node] = tree
 
         for auxiliary_node in self.symbol_to_auxiliary_node.values():
-            word_to_next_tree[auxiliary_node.word] = self.trees[0]
+            node_to_next_tree[auxiliary_node] = self.trees[0]
 
-        return word_to_next_tree
+        return node_to_next_tree
 
     def code(self, input):
         if self.is_raw:
@@ -1489,16 +1497,16 @@ def compare_basic_trees():
 # --- Simulation running
 
 def codec_dict_source_to_path(codec_params_dict, source):
+    """Get the file path where a codec's prebuilt results can be stored
+    """
     codec_params_dict = dict(codec_params_dict)
     cls_name = codec_params_dict.pop("_cls").__name__
-    codec_params_dict["source"] = source.name
-
+    codec_params_dict["source"] = re.sub(r"_seed[^_]*", "", source.name)
     path = os.path.join(
         prebuilt_dir,
         f"{cls_name}_" +
         "_".join(f"{k}-{codec_params_dict[k]}" for k in sorted(codec_params_dict.keys()))
         + ".zip")
-
     return path
 
 
@@ -1530,7 +1538,7 @@ def evaluate_codec(codec_params_dict, source, input):
     bps = coded_dict["coded_bits"] / len(input)
     print(f"\t- coded rate: {bps} bps")
 
-    if not codec_is_loaded:
+    if not codec_is_loaded and test_dumped_codecs:
         print(f"\t- dumping prebuilt codec {codec.name} to {codec_dump_path}")
         codec.dump(codec_dump_path)
         delta = 1
@@ -1550,7 +1558,7 @@ def evaluate_codec(codec_params_dict, source, input):
     return dict(bps=bps, source=source, codec=codec, input=input)
 
 
-def plot_input_samples(input_by_source):
+def plot_input_samples(input_by_source, seed):
     for source, input in input_by_source.items():
         plot_path = os.path.join(input_plot_dir, f"input_{source.name}_seed{seed}.pdf")
         if os.path.exists(plot_path):
@@ -1572,7 +1580,7 @@ def plot_input_samples(input_by_source):
         plt.close()
 
 
-def save_raw_inputs(input_by_source):
+def save_raw_inputs(input_by_source, seed):
     for source, input in input_by_source.items():
         output_path = os.path.join(
             synthetic_inputs_dir,
@@ -1586,22 +1594,26 @@ def save_raw_inputs(input_by_source):
             input_indices.tofile(output_path)
 
 
-def generate_efficiency_results():
+def generate_efficiency_results(output_csv_path, seed):
     """Compute efficiency results and produce a pandas DataFrame with the aquired data
     """
 
     print("# Generating sources...")
-    sources = [Source.get_laplacian(symbol_count=symbol_count, max_entropy_fraction=e)
-               for e in reversed(np.linspace(1e-6, 1 / min_max_count_tested_e_fractions[2], 4))] + \
-              [Source.get_laplacian(symbol_count=symbol_count, max_entropy_fraction=f)
-               for f in np.linspace(*min_max_count_tested_e_fractions)]
+    assert min_max_count_tested_e_fractions[0] == 0
+    assert min_max_count_tested_e_fractions[1] == 1
+    sources = [Source.get_laplacian(symbol_count=symbol_count, max_entropy_fraction=f, seed=seed)
+               for f in [x for x in np.linspace(*min_max_count_tested_e_fractions)][1:]]
+    sources += [Source.get_laplacian(symbol_count=symbol_count,
+                                     max_entropy_fraction=v*symbol_count_exponent,
+                                     seed=seed)
+                for v in [0.025, 0.05, 0.075]]
 
     print("# Generating inputs...")
     input_by_source = {source: source.generate_symbols(test_input_length) for source in sources}
     print("# Saving inputs...")
-    save_raw_inputs(input_by_source=input_by_source)
+    save_raw_inputs(input_by_source=input_by_source, seed=seed)
     print("# Representing input...")
-    plot_input_samples(input_by_source=input_by_source)
+    plot_input_samples(input_by_source=input_by_source, seed=seed)
 
     test_tasks = []
     # test_tasks.append(dict(_cls=MarlinForestMarkov, K=8, O=2, S=2, symbol_p_threshold=0))
@@ -1611,30 +1623,6 @@ def generate_efficiency_results():
     # test_tasks.append(dict(_cls=TrivialTree, size=2 ** 6, is_raw=True))
 
     comparison_tasks = []
-    min_size_exponent = symbol_count_exponent + 1
-    max_size_exponent = symbol_count_exponent + 5
-    # # SOTA
-    # comparison_tasks += [dict(_cls=YamamotoTree, size=2 ** e) for e in
-    #                      reversed(range(min_size_exponent, max_size_exponent + 1))]
-    # comparison_tasks += [dict(_cls=YamamotoForest, size=2 ** e) for e in
-    #                      reversed(range(min_size_exponent, max_size_exponent + 1))]
-    # # Basic Marlin analysis
-    # comparison_tasks += [dict(_cls=MarlinBaseTree, size=2 ** e) for e in
-    #                      reversed(range(min_size_exponent, max_size_exponent + 1))]
-    # # Marlin parameter analysis
-    # for K in reversed(range(symbol_count_exponent + 1, 9)):
-    #     if minimal_run and (K != 6):
-    #         continue
-    #     for O in reversed(range(min(symbol_count_exponent + 3, K))):
-    #         if minimal_run and (O not in [0, 2]):
-    #             continue
-    #         for S in reversed(range(symbol_count_exponent)):
-    #             if minimal_run and (S not in [0, 2]):
-    #                 continue
-    #             theta_values = [0] + [10 ** (-x) for x in reversed(list(range(2, 7)))]
-    #             for i, theta in enumerate(theta_values):
-    #                 comparison_tasks.append(
-    #                     dict(_cls=MarlinForestMarkov, K=K, O=O, S=S, symbol_p_threshold=theta))
 
     ## Fig 1 - Tree codec comparison
     if generate_fig1:
@@ -1645,27 +1633,46 @@ def generate_efficiency_results():
 
     ## Fig 2 - Forest codec comparison
     if generate_fig2:
-        K = 8
-        for O in range(symbol_count_exponent):
+        K = K_for_O_analysis
+        for O in O_analysis_values:
             comparison_tasks.append(dict(_cls=MarlinForestMarkov,
                                          K=K, O=O, S=0, symbol_p_threshold=0))
         comparison_tasks.append(dict(_cls=YamamotoForest, size=2 ** K))
 
     ## Fig 3 - Shift and symbol_p_threshold
     if generate_fig3:
-        K = 8
-        O = 2
+        K = shift_K_value
+        O = shift_O_value
         for S in range(symbol_count_exponent):
             comparison_tasks.append(dict(_cls=MarlinForestMarkov,
                                          K=K, O=O, S=S, symbol_p_threshold=0))
-            comparison_tasks.append(dict(_cls=MarlinForestMarkov,
-                                         K=K, O=O, S=S, symbol_p_threshold=1e-6))
-        # comparison_tasks.append(dict(_cls=YamamotoForest, size=2**K))
+
+    ## Fig K value evolution comparison
+    if generate_fig_k:
+        for K in K_analysis_values:
+            comparison_tasks.append(
+                dict(_cls=MarlinForestMarkov, K=K, O=0, S=0, symbol_p_threshold=0))
+        comparison_tasks.append(
+            dict(_cls=YamamotoTree, size=2 ** max(K_analysis_values)))
+        comparison_tasks.append(
+            dict(_cls=YamamotoTree, size=2 ** K_for_O_analysis))
 
     print("# Defining tasks...")
     codec_dicts = test_tasks if test_tasks else comparison_tasks
+
     # codec_dicts = test_tasks + comparison_tasks
     # codec_dicts = comparison_tasks
+    def equal_dicts(d1, d2):
+        return all((not k in d1 and not k in d2) or d1[k] == d2[k]
+                   for k in ["_cls", "K", "O", "S", "size", "symbol_p_threshold"])
+
+    unique_codec_dicts = []
+    for d in codec_dicts:
+        if any(equal_dicts(d, d_included) for d_included in unique_codec_dicts):
+            continue
+        unique_codec_dicts.append(d)
+    codec_dicts = unique_codec_dicts
+
     for d in codec_dicts:
         task_string = f"{d['_cls'].__name__}(**"
         task_string += str({k: v for k, v in d.items() if k != '_cls'}) + ")"
@@ -1726,7 +1733,7 @@ def generate_efficiency_results():
         exit_on_error=exit_on_error,
         verbose=multiprocess_verbose)
 
-    df.to_csv(efficiency_results_path)
+    df.to_csv(output_csv_path)
 
     print(f"Obtained {len(results)} results!")
     if len(results) < len(invocation_list):
@@ -1773,6 +1780,7 @@ def plot_efficiency_results(
             print("[watch] df.columns = {}".format(df.columns))
 
         data_by_cls_sourcelen_label_pvdict = {}
+
         for cls_name, group_df in df.groupby(by="cls"):
             print("========")
             print(f"{cls_name}")
@@ -1780,7 +1788,7 @@ def plot_efficiency_results(
 
             subgroup_params = [param for param in param_columns
                                if group_df[param].notnull().any()
-                               and param != y_column_name]
+                               and param not in [y_column_name, "seed"]]
 
             group_df = group_df.sort_values(by=x_column_name)
 
@@ -1788,6 +1796,29 @@ def plot_efficiency_results(
 
             subgroup_added = False
             for l, sg_df in group_df.groupby(by=list(subgroup_params)):
+                rel_y_diffs = []
+                sg_df = sg_df.sort_values(by=x_column_name)
+                seed_count = len(sg_df["seed"].unique())
+                if seed_count >= 1:
+                    all_x_values = sg_df[x_column_name].values
+                    all_y_values = sg_df[y_column_name].values
+                    i = 0
+                    x_values = [0]
+                    y_values = [0]
+                    while True:
+                        local_x_values = all_x_values[i * seed_count:(i + 1) * seed_count]
+                        local_y_values = all_y_values[i * seed_count:(i + 1) * seed_count]
+                        if len(local_x_values) == 0:
+                            assert len(local_y_values) == 0
+                            break
+                        x_values.append(sum(local_x_values) / len(local_x_values))
+                        y_values.append(sum(local_y_values) / len(local_y_values))
+                        rel_y_diffs.append(max(local_y_values) - min(local_y_values))
+                        i += 1
+                else:
+                    x_values = sg_df[x_column_name].values
+                    y_values = sg_df[y_column_name].values
+
                 # Build subgroup label
                 param_value_dict = {}
                 try:
@@ -1809,11 +1840,14 @@ def plot_efficiency_results(
                 data_by_cls_sourcelen_label_pvdict[(
                     cls_name, source_len, label, frozenset(param_value_dict.items()))] = \
                     LineData(label=label,
-                             x_values=sg_df[x_column_name].values,
-                             y_values=sg_df[y_column_name].values,
+                             x_values=x_values,
+                             y_values=y_values,
                              x_label=pretty_label_dict.get(x_column_name, x_column_name),
                              y_label=pretty_label_dict.get(y_column_name, y_column_name))
                 subgroup_added = True
+                print(f"Average variability for different seeds: {cls_name}/{l}: "
+                      f"{sum(rel_y_diffs) / len(rel_y_diffs):.6f} "
+                      f"(max: {max(rel_y_diffs):.6f})")
             if not subgroup_added:
                 data_by_cls_sourcelen_label_pvdict[(
                     cls_name, source_len, label, {})] = LineData(
@@ -1850,7 +1884,6 @@ def plot_efficiency_results(
             marlin_basetree_data.extra_kwargs.update(dict(linestyle="-"))
             marlin_markovtree_data.extra_kwargs.update(dict(linestyle="--"))
 
-
             plt.figure()
             marlin_basetree_data.render()
             marlin_markovtree_data.render()
@@ -1880,16 +1913,26 @@ def plot_efficiency_results(
             plt.rcParams.update({'font.size': 12})
             max_K = 8
             size = 2 ** max_K
-            O_values = range(symbol_count_exponent)
+            O_values = O_analysis_values
             plt.figure()
 
             yamamoto_forest_data = find_by_cls_params(
                 cls=YamamotoForest,
                 data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
                 params={"size": size})
-            yamamoto_forest_data.label = f"Yamamoto and Yokoo's Forest: $|\mathcal{{F}}\ | = {2 ** symbol_count_exponent - 1}$,  $|\mathcal{{T}}\ | = {size:.0f}$"
+            yamamoto_forest_data.label = f"Yamamoto and Yokoo's Forest: $|\mathcal{{F}}\ | = {2 ** symbol_count_exponent - 1}$," \
+                                         f"  $|\mathcal{{T}}\ | = {size:.0f}$"
             yamamoto_forest_data.alpha = 0.5
             yamamoto_forest_data.extra_kwargs.update(dict(linestyle="-", color="magenta"))
+
+            yamamoto_tree_data = find_by_cls_params(
+                cls=YamamotoTree,
+                data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
+                params={"size": size})
+            yamamoto_tree_data.label = f"Yamamoto and Yokoo's Tree: $|\mathcal{{F}}\ | = 1$," \
+                                       f" $|\mathcal{{T}}\ | = {size:.0f}$"
+            yamamoto_tree_data.alpha = 0.5
+            yamamoto_tree_data.extra_kwargs.update(dict(linestyle="--", color="magenta"))
 
             for O in O_values:
                 data = find_by_cls_params(
@@ -1901,13 +1944,14 @@ def plot_efficiency_results(
                     f"$| \mathcal{{F}}\ | = 2^\Omega = {2 ** O}$, $| \mathcal{{T}}\ | = 2^K = {2 ** max_K}$"
                 data.alpha = 0.5
                 if O is O_values[0]:
-                    data.extra_kwargs = {"linestyle": "--", "color":"red"}
+                    data.extra_kwargs = {"linestyle": "--", "color": "red"}
                 elif O is O_values[2]:
                     data.extra_kwargs = {"linestyle": "-", "color": "green"}
 
                 data.render()
                 print(f"{data.y_label}: K={max_K} O={O} {np.mean(data.diff(yamamoto_forest_data).y_values)}")
 
+            yamamoto_tree_data.render()
             yamamoto_forest_data.render()
             plt.xlim(0, symbol_count_exponent)
             plt.ylim(min_shown_efficiency, 1)
@@ -1919,8 +1963,8 @@ def plot_efficiency_results(
         ## Fig 3 Shift
         if generate_fig3:
             plt.rcParams.update({'font.size': 12})
-            K = 8
-            O = 2
+            K = shift_K_value
+            O = shift_O_value
             size = 2 ** 8
             for S in [0, 1, 3]:
                 for symbol_p_threshold in [0]:
@@ -1964,6 +2008,43 @@ def plot_efficiency_results(
                              f"shift_improvements_{source_len}symbols.pdf"), bbox_inches="tight")
             plt.close()
 
+        if generate_fig_k:
+            plt.rcParams.update({'font.size': 12})
+            plt.figure()
+            for K in K_analysis_values:
+                for O in [0]:
+                    data = find_by_cls_params(
+                        cls=MarlinForestMarkov,
+                        data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
+                        params={"K": K, "O": O, "S": 0, "symbol_p_threshold": 0})
+                    data.label = \
+                        f"Algorithm 7 Tree: $| \mathcal{{T}}\ | = 2^K = {2 ** K}$"
+                    data.alpha = 0.5
+                    # if K == K_analysis_values[0]:
+                    #     data.extra_kwargs = {"linestyle": "--", "color": "red"}
+                    data.render()
+
+            for K in [K_for_O_analysis, max(K_analysis_values)]:
+                yamamoto_tree_data = find_by_cls_params(
+                    cls=YamamotoTree,
+                    data_by_cls_sourcelen_label_pvdict=data_by_cls_sourcelen_label_pvdict,
+                    params={"size": 2 ** K})
+                yamamoto_tree_data.label = f"Yamamoto and Yokoo's Tree: " \
+                                           f"$|\mathcal{{T}}\ | = {2 ** K:.0f}$"
+                yamamoto_tree_data.alpha = 0.5
+                if K == K_for_O_analysis:
+                    yamamoto_tree_data.extra_kwargs.update(dict(linestyle="--", color="magenta"))
+                elif K == max(K_analysis_values):
+                    yamamoto_tree_data.extra_kwargs.update(dict(linestyle="-.", color="magenta"))
+                yamamoto_tree_data.render()
+
+            plt.xlim(0, symbol_count_exponent)
+            plt.ylim(min_shown_efficiency, 1)
+            plt.savefig(
+                os.path.join(efficiency_plot_dir,
+                             f"k_analysis_{source_len}symbols.pdf"), bbox_inches="tight")
+            plt.close()
+
 
 def filter_marlinforest_selection(data_by_cls_sourcelen_label_pvdict, K, O, S, symbol_p_threshold):
     """Return a list of PlottableData instances for the marlin
@@ -1983,10 +2064,13 @@ def filter_marlinforest_selection(data_by_cls_sourcelen_label_pvdict, K, O, S, s
         pvdict = dict(pvdict)
         if cls_name != MarlinForestMarkov.__name__:
             continue
-        if (K is None or pvdict["K"] in K_values) \
-                and (O is None or pvdict["O"] in O_values) \
-                and (S is None or pvdict["S"] in S_values) \
-                and (symbol_p_threshold is None or pvdict["symbol_p_threshold"] in theta_values):
+        if (K is None or ("K" in pvdict and pvdict["K"] in K_values)) \
+                and (O is None
+                     or ("O" in pvdict and pvdict["O"] in O_values)) \
+                and (S is None
+                     or ("S" in pvdict and pvdict["S"] in S_values)) \
+                and (symbol_p_threshold is None
+                     or ("symbol_p_threshold" in pvdict and pvdict["symbol_p_threshold"] in theta_values)):
             selected_data.append(data)
     return selected_data
 
@@ -2021,15 +2105,38 @@ def filter_marlin_basetree(data_by_cls_sourcelen_label_pvdict, size):
 
 
 if __name__ == '__main__':
-    if os.path.exists(efficiency_results_path) and not overwrite_efficiency_results:
-        print(f"Re-using result csv {efficiency_results_path}")
-        df = pd.read_csv(efficiency_results_path)
-    else:
-        df = generate_efficiency_results()
+    # randomly generated, fixed for reproducibility
+    np.random.seed((0x1f41af31 * 0xb4dc0ff3e) % (2 ** 31 - 1))
+    seed_list = [np.random.randint(0, 2 ** 31 - 1) for _ in range(16)]
+    seed_list = [s % (2 ** 32 - 1) for s in seed_list]
+    seed_to_df = {}
 
-    if df is None:
-        print("No data to render. Aborting")
-        sys.exit(1)
+    for current_seed in seed_list:
+        efficiency_results_path = efficiency_results_template.format(hex(current_seed))
+        print(f"@@@@@ Calculating for seed {current_seed} -> {efficiency_results_path}")
 
-    df = curate_data(df)
+        if os.path.exists(efficiency_results_path) and not overwrite_efficiency_results:
+            print(f"Re-using result csv {efficiency_results_path}")
+            df = pd.read_csv(efficiency_results_path)
+        else:
+            shutil.rmtree("prebuilt")
+            os.makedirs("prebuilt")
+            df = generate_efficiency_results(seed=current_seed, output_csv_path=efficiency_results_path)
+        if df is None:
+            print("No data to render. Aborting")
+            sys.exit(1)
+
+        df = curate_data(df)
+        seed_to_df[current_seed] = pd.DataFrame(df)
+        seed_to_df[current_seed].loc[:, "seed"] = current_seed
+
+        plot_efficiency_results(df)
+        shutil.rmtree(f"plots_seed{hex(current_seed)}", ignore_errors=True)
+        shutil.copytree("plots", f"plots_seed{hex(current_seed)}")
+        # shutil.rmtree(f"pid_files", ignore_errors=True)
+        # shutil.rmtree(f"synthetic_inputs", ignore_errors=True)
+
+    df = pd.concat(seed_to_df.values())
+    shutil.rmtree("plots_all", ignore_errors=True)
     plot_efficiency_results(df)
+    shutil.move("plots", "plots_all")

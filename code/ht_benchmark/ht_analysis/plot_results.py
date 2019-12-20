@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Plot results of the high-throughput benchmark
 """
-__author__ = "Miguel Hernández Cabronero <mhernandez@deic.uab.cat>"
+__author__ = "Miguel Hernández Cabronero <miguel.hernandez@uab.cat>"
 __date__ = "10/09/2019"
 
 import os
