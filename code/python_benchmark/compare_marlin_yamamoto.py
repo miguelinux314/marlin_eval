@@ -18,8 +18,7 @@ import shutil
 import collections
 import re
 import matplotlib
-
-# matplotlib.use('Agg')
+matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 import pinvoker
 import pandas as pd
@@ -1354,10 +1353,7 @@ class MarlinForestMarkov(Forest):
                     "S": self.S,
                     "symbol_p_threshold": self.symbol_p_threshold,
                     "source": self.source,
-                    # "metasymbol_to_symbols": self.metasymbol_to_symbols,
                     "original_source": self.original_source,
-                    # "symbol_to_auxiliary_node": self.symbol_to_auxiliary_node,
-                    # "symbol_to_metasymbol_remainder": self.symbol_to_metasymbol_remainder,
                     "is_raw": self.is_raw,
                     "_cls": self.__class__}
 
@@ -1525,18 +1521,14 @@ def evaluate_codec(codec_params_dict, source, input):
         cls = codec_params_dict.pop("_cls")
         codec_params_dict["source"] = source
         codec = cls(**codec_params_dict)
-    print("\t- codec.name = {}".format(codec.name))
-
-    print("\t- coding input...")
+    print(f"\t- coding, decoding and comparing with {codec.name}...")
     coded_dict = codec.code(input)
-    print("\t- decoding and comparing...")
     decoded_data = codec.decode(coded_dict)[:len(input)]
     decoded_symbols = decoded_data[:len(input)]
 
     assert np.array(input).tolist() == decoded_symbols, \
         ("Not lossless", codec.name, input[:10], decoded_symbols[:10])
     bps = coded_dict["coded_bits"] / len(input)
-    print(f"\t- coded rate: {bps} bps")
 
     if not codec_is_loaded and test_dumped_codecs:
         print(f"\t- dumping prebuilt codec {codec.name} to {codec_dump_path}")
@@ -1553,7 +1545,7 @@ def evaluate_codec(codec_params_dict, source, input):
             if delta != 0:
                 os.remove(codec_dump_path)
 
-    print(f"\t- codec is --[lossless]--> {bps:.5f}bps")
+    print(f"\t- codec  {loaded_codec.name} is --[lossless]--> {bps:.5f}bps")
 
     return dict(bps=bps, source=source, codec=codec, input=input)
 
@@ -1568,8 +1560,6 @@ def plot_input_samples(input_by_source, seed):
                  bins=len(source), density=True, range=(0, len(source)), rwidth=1,
                  label="sample", edgecolor="black")
         plt.xlim(0, len(source) - 1)
-        # x_values, y_values = zip(*((i, symbol.p) for i, symbol in enumerate(source.symbols)))
-        # plt.plot(x_values, y_values, label="expected", alpha=0.7)
         plt.xlabel("Input symbol")
         plt.ylabel("Probability")
         plt.legend(loc="best")
@@ -1660,8 +1650,6 @@ def generate_efficiency_results(output_csv_path, seed):
     print("# Defining tasks...")
     codec_dicts = test_tasks if test_tasks else comparison_tasks
 
-    # codec_dicts = test_tasks + comparison_tasks
-    # codec_dicts = comparison_tasks
     def equal_dicts(d1, d2):
         return all((not k in d1 and not k in d2) or d1[k] == d2[k]
                    for k in ["_cls", "K", "O", "S", "size", "symbol_p_threshold"])
@@ -1769,7 +1757,6 @@ def plot_efficiency_results(
         }):
     # Filter out raw coders - uninteresting
     full_df["is_raw"] = full_df["is_raw"].fillna(False)
-    # df = df[df["is_raw"] == False]
 
     for source_len, df in full_df.groupby(by="source_len"):
         # Group data by cls then by parameters
@@ -2107,7 +2094,7 @@ def filter_marlin_basetree(data_by_cls_sourcelen_label_pvdict, size):
 if __name__ == '__main__':
     # randomly generated, fixed for reproducibility
     np.random.seed((0x1f41af31 * 0xb4dc0ff3e) % (2 ** 31 - 1))
-    seed_list = [np.random.randint(0, 2 ** 31 - 1) for _ in range(16)]
+    seed_list = [np.random.randint(0, 2 ** 31 - 1) for _ in range(8)]
     seed_list = [s % (2 ** 32 - 1) for s in seed_list]
     seed_to_df = {}
 
@@ -2129,12 +2116,6 @@ if __name__ == '__main__':
         df = curate_data(df)
         seed_to_df[current_seed] = pd.DataFrame(df)
         seed_to_df[current_seed].loc[:, "seed"] = current_seed
-
-        plot_efficiency_results(df)
-        shutil.rmtree(f"plots_seed{hex(current_seed)}", ignore_errors=True)
-        shutil.copytree("plots", f"plots_seed{hex(current_seed)}")
-        # shutil.rmtree(f"pid_files", ignore_errors=True)
-        # shutil.rmtree(f"synthetic_inputs", ignore_errors=True)
 
     df = pd.concat(seed_to_df.values())
     shutil.rmtree("plots_all", ignore_errors=True)
