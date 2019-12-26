@@ -1,15 +1,21 @@
-#!/bin/bash
-# main.sh
-#
-# Run all benchmarks
-#
-# Miguel Hernández Cabronero <miguel.hernandez@uab.cat>
+#!/usr/bin/env bash
+set -ex
+
 cat /proc/cpuinfo
 cat /etc/issue
 
 echo "Running all benchmarks..."
 echo "(see README.md in case any library is not found)"
 echo
+
+cd python_benchmark
+./clean.sh
+echo "Running Python benchmark..."
+date
+./compare_marlin_yamamoto.py
+echo "... done!"
+cp -r plots_all ../../results/
+cd ..
 
 cd ht_benchmark
 echo "Building HT benchmark..."
@@ -41,15 +47,6 @@ echo "... built HT benchamrk!"
     echo "Finished HT benchmark"
     cp *results.csv allcodecs*pdf ../../../results/
 cd ../../
-
-cd python_benchmark
-./clean.sh
-echo "Running Python benchmark..."
-date
-./compare_marlin_yamamoto.py
-echo "... done!"
-cp -r plots ../../results/
-cd ..
 
 echo "All benchmarks run. See ../results"
 

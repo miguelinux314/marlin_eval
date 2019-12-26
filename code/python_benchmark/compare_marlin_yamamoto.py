@@ -1545,7 +1545,7 @@ def evaluate_codec(codec_params_dict, source, input):
             if delta != 0:
                 os.remove(codec_dump_path)
 
-    print(f"\t- codec  {loaded_codec.name} is --[lossless]--> {bps:.5f}bps")
+    print(f"\t- codec is --[lossless]--> {bps:.5f}bps")
 
     return dict(bps=bps, source=source, codec=codec, input=input)
 
